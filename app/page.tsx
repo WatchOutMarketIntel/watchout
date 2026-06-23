@@ -3,8 +3,8 @@ import { useEffect } from 'react';
 
 export default function Home() {
   useEffect(() => {
-    // ── WATCH DATA ──
-    const WATCHES = [
+    // ── WATCH DATA (placeholder; replaced by live data from the API below) ──
+    const PLACEHOLDER = [
       { brand: 'Rolex', name: 'Submariner Date', ref: '126610LN', price: 14250, change: 2.3, img: 'https://upload.wikimedia.org/wikipedia/commons/thumb/a/a5/Rolex_Submariner_Professional.JPG/300px-Rolex_Submariner_Professional.JPG', fb: '🖤' },
       { brand: 'Patek Philippe', name: 'Nautilus', ref: '5711/1A-010', price: 51800, change: -1.1, img: 'https://upload.wikimedia.org/wikipedia/commons/thumb/6/6a/Patek_Philippe_Nautilus_5711-1A.jpg/300px-Patek_Philippe_Nautilus_5711-1A.jpg', fb: '🤍' },
       { brand: 'Audemars Piguet', name: 'Royal Oak 41mm', ref: '15500ST', price: 36400, change: 0.8, img: 'https://upload.wikimedia.org/wikipedia/commons/thumb/e/e9/Audemars_Piguet_Royal_Oak_15300ST.jpg/300px-Audemars_Piguet_Royal_Oak_15300ST.jpg', fb: '🩶' },
@@ -22,6 +22,8 @@ export default function Home() {
     const fmt = (p: number) => '$' + p.toLocaleString();
     const fmtChg = (c: number) => (c >= 0 ? '▲ +' : '▼ ') + Math.abs(c).toFixed(1) + '%';
 
+    // Everything below renders from whatever watch list it's given (live or placeholder).
+    const init = (WATCHES: any[]) => {
     // ── TAB SYSTEM ──
     const switchTab = (name: string) => {
       document.querySelectorAll('.wo-page').forEach(p => p.classList.remove('active'));
@@ -152,7 +154,7 @@ export default function Home() {
           <td><div class="mkt-watch-name">${w.name}</div><div class="mkt-brand">${w.brand} · ${w.ref}</div></td>
           <td class="mkt-price">${fmt(w.price)}</td>
           <td><span class="${w.change >= 0 ? 'badge-up' : 'badge-dn'}">${fmtChg(w.change)}</span></td>
-          <td style="color:rgba(232,224,208,0.3);font-size:0.72rem">${Math.floor(Math.random() * 200 + 20)} listings</td>
+          <td style="color:rgba(232,224,208,0.3);font-size:0.72rem">${(w as any).count != null ? (w as any).count : Math.floor(Math.random() * 200 + 20)} listings</td>
           <td><button class="alert-btn" onclick="openModal()">+ Alert</button></td>
         </tr>`).join('');
     };
@@ -258,7 +260,32 @@ export default function Home() {
       entries.forEach(e => { if (e.isIntersecting) e.target.classList.add('in'); });
     }, { threshold: 0.1 });
     document.querySelectorAll('.fade').forEach(el => obs.observe(el));
+    }; // end init
 
+    // ── LOAD LIVE DATA ──
+    // Fetch real prices from the WatchOut API. If anything fails (API down,
+    // no data yet), we fall back to the placeholder list so the page still works.
+    const API = (process.env.NEXT_PUBLIC_API_URL || 'https://watchout-api-production.up.railway.app').replace(/\/+$/, '');
+    let cancelled = false;
+    fetch(`${API}/market`)
+      .then(r => (r.ok ? r.json() : Promise.reject(r.status)))
+      .then(d => {
+        if (cancelled) return;
+        const live = (d.watches || []).map((w: any) => ({
+          brand: w.brand,
+          name: w.name,
+          ref: w.ref || '',
+          price: Number(w.price) || 0,
+          change: Number(w.change) || 0,
+          count: w.num_listings,
+          img: '',
+          fb: '⌚',
+        }));
+        init(live.length ? live : PLACEHOLDER);
+      })
+      .catch(() => { if (!cancelled) init(PLACEHOLDER); });
+
+    return () => { cancelled = true; };
   }, []);
 
   return (
