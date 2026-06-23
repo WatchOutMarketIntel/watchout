@@ -1,6 +1,21 @@
 'use client';
 import { useEffect } from 'react';
 
+// Inline Lucide-style SVG icons — no emoji; consistent 1.6 stroke, theme-colored via currentColor.
+const _svg = (inner: string) =>
+  `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">${inner}</svg>`;
+const SVG: Record<string, string> = {
+  home: _svg('<path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M9 22V12h6v10"/>'),
+  market: _svg('<path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/>'),
+  watchlists: _svg('<path d="M8 6h13M8 12h13M8 18h13"/><path d="M3 6h.01M3 12h.01M3 18h.01"/>'),
+  alerts: _svg('<path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/>'),
+  account: _svg('<path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>'),
+  trending: _svg('<path d="M3 17 9 11l4 4 8-8"/><path d="M16 7h5v5"/>'),
+  watch: _svg('<circle cx="12" cy="12" r="5.5"/><path d="M12 9.5V12l1.6 1.2"/><path d="M8.6 6.6 8 3.2h8l-.6 3.4"/><path d="M8.6 17.4 8 20.8h8l-.6-3.4"/>'),
+  mail: _svg('<rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/>'),
+  phone: _svg('<rect x="7" y="2" width="10" height="20" rx="2"/><path d="M11 18h2"/>'),
+};
+
 export default function Home() {
   useEffect(() => {
     // ── WATCH DATA (placeholder; replaced by live data from the API below) ──
@@ -49,8 +64,8 @@ export default function Home() {
       node.className = 'wcard';
       node.id = `wc${i}`;
       const imgHtml = w.img
-        ? `<img class="wcard-img" src="${w.img}" alt="${w.brand} ${w.name}" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'" loading="lazy"/><div class="wcard-fallback" style="display:none">${w.fb}</div>`
-        : `<div class="wcard-fallback" style="display:flex">${w.fb}</div>`;
+        ? `<img class="wcard-img" src="${w.img}" alt="${w.brand} ${w.name}" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'" loading="lazy"/><div class="wcard-fallback" style="display:none">${SVG.watch}</div>`
+        : `<div class="wcard-fallback" style="display:flex">${SVG.watch}</div>`;
       node.innerHTML = `<div class="wcard-inner">${imgHtml}<div class="wcard-info"><div class="wcard-brand">${w.brand}</div><div class="wcard-name">${w.name}</div><div class="wcard-row"><span class="wcard-price">${fmt(w.price)}</span><span class="wcard-chg ${w.change >= 0 ? 'up' : 'down'}">${fmtChg(w.change)}</span></div></div></div>`;
       node.addEventListener('click', () => { winderAngle = -(2 * Math.PI / N) * i; });
       scene.appendChild(node);
@@ -61,9 +76,9 @@ export default function Home() {
       if (!wrap) return;
       const W = wrap.offsetWidth;
       const H = wrap.offsetHeight;
-      const rX = W * 0.32;
-      const rY = H * 0.12;
-      const cardW = Math.min(130, W * 0.26);
+      const rX = W * 0.42;
+      const rY = H * 0.20;
+      const cardW = Math.min(112, W * 0.22);
 
       const cards = winderWatches.map((w, i) => {
         const theta = (2 * Math.PI / N) * i + winderAngle;
@@ -78,17 +93,17 @@ export default function Home() {
       cards.forEach((c, renderOrder) => {
         const node = document.getElementById(`wc${c.i}`);
         if (!node) return;
-        const isFront = c.depth > 0.85;
-        const isBack = c.depth <= 0.25;
+        const isFront = c.depth > 0.82;
+        const isBack = c.depth <= 0.40;
 
         if (isBack) {
           node.style.cssText = `position:absolute;opacity:0;pointer-events:none;z-index:${renderOrder};width:${cardW}px;`;
           return;
         }
 
-        const scale = isFront ? 1 : 0.72;
-        const opacity = isFront ? 1 : 0.45;
-        const filter = isFront ? 'none' : 'brightness(0.55)';
+        const scale = isFront ? 1 : 0.6;
+        const opacity = isFront ? 1 : 0.28;
+        const filter = isFront ? 'none' : 'brightness(0.45)';
         const left = W / 2 + c.x - (cardW * scale) / 2;
         const top = H / 2 + c.y - cardW * 0.75 * scale;
 
@@ -174,7 +189,7 @@ export default function Home() {
           <div class="wl-card-head"><div class="wl-card-title">My Collection Targets</div><div class="wl-card-count">${myWatchlist.length} Watches</div></div>
           ${myWatchlist.map(w => `
             <div class="wl-row">
-              <div class="wl-thumb">${w.img ? `<img src="${w.img}" alt="${w.name}" onerror="this.parentElement.innerHTML='${w.fb}'">` : w.fb}</div>
+              <div class="wl-thumb">${w.img ? `<img src="${w.img}" alt="${w.name}">` : SVG.watch}</div>
               <div class="wl-info"><div class="wl-name">${w.name}</div><div class="wl-ref">${w.brand} · ${w.ref}</div></div>
               <div><div class="wl-price">${fmt(w.price)}</div><div class="wl-chg ${w.change >= 0 ? 'up' : 'down'}">${fmtChg(w.change)}</div></div>
             </div>`).join('')}
@@ -193,7 +208,7 @@ export default function Home() {
       const list = document.getElementById('alertsList');
       if (!list) return;
       if (activeAlerts.length === 0) {
-        list.innerHTML = `<div class="empty-state"><div class="empty-icon">🔔</div><div class="empty-title">No active alerts</div><p class="empty-desc">Set your first alert above.</p></div>`;
+        list.innerHTML = `<div class="empty-state"><div class="empty-icon">${SVG.alerts}</div><div class="empty-title">No active alerts</div><p class="empty-desc">Set your first alert above.</p></div>`;
         return;
       }
       list.innerHTML = activeAlerts.map((a, i) => `
@@ -291,21 +306,25 @@ export default function Home() {
   return (
     <>
       <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600&display=swap');
         *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
         :root{
-          --bg:#030e1a;--bg2:#050f1c;--bg3:#071624;--bg4:#0a1e30;--bg5:#0d2540;
-          --border:rgba(255,255,255,0.07);--border2:rgba(201,168,76,0.3);
-          --gold:#c9a84c;--gold2:#deba6a;--gold3:#f0d48a;
-          --cream:#e8e0d0;--cream2:rgba(232,224,208,0.55);--cream3:rgba(232,224,208,0.28);
-          --green:#3dba7e;--red:#e05858;
+          --font-sans:"Geist","Inter",system-ui,sans-serif;
+          --font-mono:"Geist Mono","IBM Plex Mono",ui-monospace,monospace;
+          /* refined dark palette — mapped onto the original variable names */
+          --bg:#0A0C10;--bg2:#0D1014;--bg3:#111419;--bg4:#181C23;--bg5:#1E232B;
+          --border:#242A33;--border2:rgba(201,162,75,0.30);
+          --gold:#C9A24B;--gold2:#D9B567;--gold3:#E8C988;
+          --cream:#ECEDEE;--cream2:#A7AEB8;--cream3:#6B7280;
+          --green:#5CB98B;--red:#D86C63;
+          --r-sm:8px;--r:12px;--r-lg:16px;
         }
         html{scroll-behavior:smooth;}
-        body{font-family:'Inter',system-ui,sans-serif;background:var(--bg);color:var(--cream);overflow-x:hidden;}
-        @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500;0,700;1,500&family=Inter:wght@300;400;500&display=swap');
+        body{font-family:var(--font-sans);background:var(--bg);color:var(--cream);overflow-x:hidden;font-variant-numeric:tabular-nums;letter-spacing:-0.006em;-webkit-font-smoothing:antialiased;}
 
         /* NAV */
         .topnav{position:fixed;top:0;left:0;right:0;z-index:300;height:56px;background:rgba(3,14,26,0.97);backdrop-filter:blur(20px);border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 clamp(1rem,3vw,2.5rem);gap:clamp(0.5rem,2vw,1.5rem);}
-        .logo{font-family:'Playfair Display',serif;font-size:1.25rem;font-weight:700;color:var(--cream);letter-spacing:0.06em;text-decoration:none;flex-shrink:0;margin-right:clamp(0.5rem,2vw,1.5rem);}
+        .logo{font-family:var(--font-sans);font-size:1.25rem;font-weight:700;color:var(--cream);letter-spacing:0.06em;text-decoration:none;flex-shrink:0;margin-right:clamp(0.5rem,2vw,1.5rem);}
         .logo em{color:var(--gold);font-style:italic;}
         .nav-tabs{display:flex;align-items:stretch;gap:0;flex:1;height:100%;overflow-x:auto;scrollbar-width:none;}
         .nav-tabs::-webkit-scrollbar{display:none;}
@@ -327,7 +346,7 @@ export default function Home() {
         .hero{min-height:100svh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:72px clamp(1rem,4vw,2.5rem) 0;position:relative;overflow:hidden;text-align:center;background:var(--bg);}
         .hero::before{content:'';position:absolute;inset:0;pointer-events:none;background:radial-gradient(ellipse 100% 60% at 50% 30%,rgba(8,26,50,0.9) 0%,transparent 70%);}
         .hero-eye{font-size:0.6rem;letter-spacing:0.5em;color:var(--gold);text-transform:uppercase;margin-bottom:0.9rem;position:relative;opacity:0;animation:up 0.7s 0.1s forwards;}
-        .hero-h{font-family:'Playfair Display',serif;font-size:clamp(2rem,6vw,4.5rem);font-weight:700;line-height:1.06;color:var(--cream);letter-spacing:-0.01em;margin-bottom:0.8rem;position:relative;opacity:0;animation:up 0.7s 0.22s forwards;}
+        .hero-h{font-family:var(--font-sans);font-size:clamp(2rem,6vw,4.5rem);font-weight:700;line-height:1.06;color:var(--cream);letter-spacing:-0.01em;margin-bottom:0.8rem;position:relative;opacity:0;animation:up 0.7s 0.22s forwards;}
         .hero-h em{font-style:italic;color:var(--gold2);}
         .hero-sub{font-size:clamp(0.85rem,2vw,1rem);font-weight:300;color:var(--cream2);max-width:400px;line-height:1.7;margin:0 auto 0.8rem;position:relative;opacity:0;animation:up 0.7s 0.32s forwards;}
         .beta-pill{display:inline-flex;align-items:center;gap:0.4rem;font-size:0.6rem;letter-spacing:0.2em;text-transform:uppercase;color:var(--gold);border:1px solid rgba(201,168,76,0.25);padding:0.28rem 0.75rem;margin-bottom:1.5rem;background:rgba(201,168,76,0.05);opacity:0;animation:up 0.7s 0.42s forwards;position:relative;}
@@ -345,14 +364,14 @@ export default function Home() {
         .wcard-fallback{width:100%;aspect-ratio:1;background:var(--bg4);display:flex;align-items:center;justify-content:center;font-size:2rem;}
         .wcard-info{padding:0.55rem 0.7rem 0.7rem;}
         .wcard-brand{font-size:0.5rem;letter-spacing:0.3em;color:var(--gold);text-transform:uppercase;margin-bottom:0.1rem;}
-        .wcard-name{font-family:'Playfair Display',serif;font-size:clamp(0.72rem,1.8vw,0.82rem);font-weight:500;color:var(--cream);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:0.3rem;}
+        .wcard-name{font-family:var(--font-sans);font-size:clamp(0.72rem,1.8vw,0.82rem);font-weight:500;color:var(--cream);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:0.3rem;}
         .wcard-row{display:flex;align-items:center;justify-content:space-between;}
         .wcard-price{font-size:0.75rem;font-weight:500;color:var(--gold2);}
         .wcard-chg{font-size:0.65rem;}
         .up{color:#3dba7e;}.down{color:#e05858;}
         .wc{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);text-align:center;pointer-events:none;z-index:0;}
         .wc-label{font-size:0.52rem;letter-spacing:0.35em;color:var(--gold);text-transform:uppercase;margin-bottom:0.2rem;}
-        .wc-name{font-family:'Playfair Display',serif;font-size:clamp(0.85rem,2vw,1rem);color:var(--cream);font-weight:500;}
+        .wc-name{font-family:var(--font-sans);font-size:clamp(0.85rem,2vw,1rem);color:var(--cream);font-weight:500;}
 
         /* HERO ACTIONS */
         .hero-actions{display:flex;gap:0.6rem;flex-wrap:wrap;justify-content:center;margin-bottom:2rem;position:relative;opacity:0;animation:up 0.7s 0.65s forwards;}
@@ -366,7 +385,7 @@ export default function Home() {
         .feat{background:var(--bg);padding:clamp(1rem,2.5vw,1.6rem) clamp(0.8rem,2vw,1.3rem);text-align:center;transition:background 0.2s;}
         .feat:hover{background:var(--bg3);}
         .feat-icon{width:30px;height:30px;border-radius:50%;background:rgba(201,168,76,0.07);border:1px solid rgba(201,168,76,0.15);display:flex;align-items:center;justify-content:center;margin:0 auto 0.6rem;font-size:13px;}
-        .feat-t{font-family:'Playfair Display',serif;font-size:clamp(0.75rem,2vw,0.85rem);font-weight:500;color:var(--cream);margin-bottom:0.25rem;}
+        .feat-t{font-family:var(--font-sans);font-size:clamp(0.75rem,2vw,0.85rem);font-weight:500;color:var(--cream);margin-bottom:0.25rem;}
         .feat-d{font-size:clamp(0.68rem,1.5vw,0.75rem);font-weight:300;color:var(--cream3);line-height:1.6;}
 
         /* TICKER */
@@ -381,7 +400,7 @@ export default function Home() {
         .page-wrap{padding:clamp(1.5rem,3vw,2.5rem) clamp(1rem,3vw,2.5rem);min-height:calc(100vh - 56px);margin-top:56px;}
         .page-head{margin-bottom:1.8rem;}
         .page-eye{font-size:0.58rem;letter-spacing:0.4em;text-transform:uppercase;color:var(--gold);margin-bottom:0.5rem;}
-        .page-h{font-family:'Playfair Display',serif;font-size:clamp(1.4rem,3.5vw,2rem);font-weight:700;color:var(--cream);margin-bottom:0.3rem;}
+        .page-h{font-family:var(--font-sans);font-size:clamp(1.4rem,3.5vw,2rem);font-weight:700;color:var(--cream);margin-bottom:0.3rem;}
         .page-h em{font-style:italic;color:var(--gold2);}
         .rule{width:32px;height:1px;background:var(--gold);margin:0.7rem 0 0;}
 
@@ -395,7 +414,7 @@ export default function Home() {
         .mkt-table td{padding:0.75rem 1rem;border-bottom:1px solid var(--border);font-size:0.8rem;vertical-align:middle;}
         .mkt-table tr:last-child td{border-bottom:none;}
         .mkt-table tr:hover td{background:rgba(10,30,48,0.5);}
-        .mkt-watch-name{font-family:'Playfair Display',serif;font-size:0.82rem;font-weight:500;color:var(--cream);}
+        .mkt-watch-name{font-family:var(--font-sans);font-size:0.82rem;font-weight:500;color:var(--cream);}
         .mkt-brand{font-size:0.6rem;color:var(--cream3);letter-spacing:0.08em;margin-top:1px;}
         .mkt-price{font-weight:500;color:var(--gold2);}
         .badge-up{display:inline-block;background:rgba(61,186,126,0.1);color:#3dba7e;border:1px solid rgba(61,186,126,0.2);font-size:0.6rem;padding:0.18rem 0.5rem;}
@@ -407,14 +426,14 @@ export default function Home() {
         .wl-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(320px,100%),1fr));gap:1rem;}
         .wl-card{background:var(--bg3);border:1px solid var(--border);padding:1.2rem;}
         .wl-card-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;padding-bottom:0.8rem;border-bottom:1px solid var(--border);}
-        .wl-card-title{font-family:'Playfair Display',serif;font-size:0.9rem;font-weight:500;color:var(--cream);}
+        .wl-card-title{font-family:var(--font-sans);font-size:0.9rem;font-weight:500;color:var(--cream);}
         .wl-card-count{font-size:0.6rem;letter-spacing:0.2em;text-transform:uppercase;color:var(--gold);}
         .wl-row{display:flex;align-items:center;gap:0.8rem;padding:0.6rem 0;border-bottom:1px solid var(--border);}
         .wl-row:last-of-type{border-bottom:none;}
         .wl-thumb{width:40px;height:40px;border-radius:8px;background:var(--bg4);border:1px solid rgba(201,168,76,0.15);overflow:hidden;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:1.1rem;}
         .wl-thumb img{width:100%;height:100%;object-fit:cover;}
         .wl-info{flex:1;min-width:0;}
-        .wl-name{font-family:'Playfair Display',serif;font-size:0.78rem;font-weight:500;color:var(--cream);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+        .wl-name{font-family:var(--font-sans);font-size:0.78rem;font-weight:500;color:var(--cream);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
         .wl-ref{font-size:0.6rem;color:var(--cream3);}
         .wl-price{font-size:0.78rem;font-weight:500;color:var(--gold2);text-align:right;}
         .wl-chg{font-size:0.65rem;text-align:right;}
@@ -429,12 +448,12 @@ export default function Home() {
         .add-wl-btn:hover{border-color:var(--gold);color:var(--gold);}
         .empty-state{padding:3rem 2rem;text-align:center;border:1px dashed rgba(201,168,76,0.15);}
         .empty-icon{font-size:2rem;margin-bottom:0.8rem;opacity:0.4;}
-        .empty-title{font-family:'Playfair Display',serif;font-size:1rem;color:var(--cream2);margin-bottom:0.4rem;}
+        .empty-title{font-family:var(--font-sans);font-size:1rem;color:var(--cream2);margin-bottom:0.4rem;}
         .empty-desc{font-size:0.78rem;color:var(--cream3);line-height:1.6;}
 
         /* ALERTS PAGE */
         .alert-form-box{background:var(--bg3);border:1px solid var(--border2);padding:clamp(1.2rem,3vw,2rem);max-width:560px;margin-bottom:2rem;}
-        .afb-title{font-family:'Playfair Display',serif;font-size:1rem;font-weight:500;color:var(--cream);margin-bottom:1.2rem;}
+        .afb-title{font-family:var(--font-sans);font-size:1rem;font-weight:500;color:var(--cream);margin-bottom:1.2rem;}
         .afb-grid{display:grid;grid-template-columns:1fr 1fr;gap:0.7rem;margin-bottom:0.7rem;}
         .afb-label{font-size:0.6rem;letter-spacing:0.18em;text-transform:uppercase;color:var(--cream3);display:block;margin-bottom:0.3rem;}
         .afb-input{width:100%;font-family:'Inter',sans-serif;font-size:0.82rem;padding:0.55rem 0.75rem;background:rgba(3,14,26,0.8);border:1px solid var(--border);color:var(--cream);outline:none;transition:border-color 0.2s;}
@@ -449,7 +468,7 @@ export default function Home() {
         .alert-card{background:var(--bg3);border:1px solid var(--border);padding:0.9rem 1rem;display:flex;align-items:center;gap:1rem;flex-wrap:wrap;}
         .alert-card-icon{font-size:1rem;flex-shrink:0;}
         .alert-card-info{flex:1;min-width:160px;}
-        .alert-card-watch{font-family:'Playfair Display',serif;font-size:0.85rem;font-weight:500;color:var(--cream);}
+        .alert-card-watch{font-family:var(--font-sans);font-size:0.85rem;font-weight:500;color:var(--cream);}
         .alert-card-detail{font-size:0.68rem;color:var(--cream3);margin-top:1px;}
         .alert-card-status{font-size:0.62rem;letter-spacing:0.15em;text-transform:uppercase;padding:0.22rem 0.6rem;border:1px solid rgba(61,186,126,0.3);color:#3dba7e;background:rgba(61,186,126,0.07);}
         .alert-card-del{background:none;border:none;color:var(--cream3);cursor:pointer;font-size:1rem;transition:color 0.2s;}
@@ -459,7 +478,7 @@ export default function Home() {
         .account-grid{display:grid;grid-template-columns:220px 1fr;gap:1.5rem;align-items:start;}
         .account-sidebar{background:var(--bg3);border:1px solid var(--border);padding:1.5rem;}
         .acct-avatar{width:60px;height:60px;border-radius:50%;background:var(--bg5);border:2px solid rgba(201,168,76,0.25);display:flex;align-items:center;justify-content:center;font-size:1.4rem;margin:0 auto 0.9rem;}
-        .acct-name{font-family:'Playfair Display',serif;font-size:0.9rem;font-weight:500;color:var(--cream);text-align:center;margin-bottom:0.2rem;}
+        .acct-name{font-family:var(--font-sans);font-size:0.9rem;font-weight:500;color:var(--cream);text-align:center;margin-bottom:0.2rem;}
         .acct-plan{font-size:0.58rem;letter-spacing:0.2em;text-transform:uppercase;color:var(--gold);text-align:center;margin-bottom:1.2rem;}
         .acct-menu{list-style:none;display:flex;flex-direction:column;gap:0.1rem;}
         .acct-menu li a,.acct-menu li button{display:block;width:100%;text-align:left;font-size:0.78rem;color:var(--cream2);padding:0.45rem 0.6rem;background:transparent;border:none;cursor:pointer;transition:all 0.2s;text-decoration:none;}
@@ -467,7 +486,7 @@ export default function Home() {
         .acct-divider{height:1px;background:var(--border);margin:0.7rem 0;}
         .account-main{display:flex;flex-direction:column;gap:1rem;}
         .acct-section{background:var(--bg3);border:1px solid var(--border);padding:1.2rem;}
-        .acct-section-title{font-family:'Playfair Display',serif;font-size:0.9rem;font-weight:500;color:var(--cream);margin-bottom:1rem;padding-bottom:0.7rem;border-bottom:1px solid var(--border);}
+        .acct-section-title{font-family:var(--font-sans);font-size:0.9rem;font-weight:500;color:var(--cream);margin-bottom:1rem;padding-bottom:0.7rem;border-bottom:1px solid var(--border);}
         .acct-row{display:flex;justify-content:space-between;align-items:center;padding:0.5rem 0;border-bottom:1px solid var(--border);font-size:0.8rem;}
         .acct-row:last-child{border-bottom:none;}
         .acct-row-label{color:var(--cream3);}
@@ -477,18 +496,18 @@ export default function Home() {
         /* PRICING */
         .pricing-section{padding:clamp(3rem,5vw,5rem) clamp(1rem,4vw,3rem);border-top:1px solid var(--border);background:var(--bg2);}
         .sec-eye{font-size:0.58rem;letter-spacing:0.4em;text-transform:uppercase;color:var(--gold);margin-bottom:0.5rem;}
-        .sec-h{font-family:'Playfair Display',serif;font-size:clamp(1.4rem,3.5vw,2rem);font-weight:700;color:var(--cream);margin-bottom:0.3rem;}
+        .sec-h{font-family:var(--font-sans);font-size:clamp(1.4rem,3.5vw,2rem);font-weight:700;color:var(--cream);margin-bottom:0.3rem;}
         .sec-h em{font-style:italic;color:var(--gold2);}
         .plans{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(190px,100%),1fr));gap:1px;background:var(--border);border:1px solid var(--border);margin-top:2rem;}
         .plan{background:var(--bg);padding:clamp(1rem,2.5vw,1.5rem);position:relative;transition:background 0.2s;}
         .plan:hover{background:var(--bg3);}
         .plan.hot{background:var(--bg3);border-top:2px solid var(--gold);}
         .plan-badge{font-size:0.52rem;letter-spacing:0.22em;text-transform:uppercase;color:var(--gold);display:block;margin-bottom:0.6rem;}
-        .plan-name{font-family:'Playfair Display',serif;font-size:0.95rem;font-weight:700;color:var(--cream);margin-bottom:0.12rem;}
+        .plan-name{font-family:var(--font-sans);font-size:0.95rem;font-weight:700;color:var(--cream);margin-bottom:0.12rem;}
         .plan-sub2{font-size:0.68rem;color:var(--cream3);margin-bottom:0.8rem;}
         .plan-pr{display:flex;align-items:baseline;gap:0.1rem;margin-bottom:0.15rem;}
         .p-d{font-size:0.8rem;color:var(--gold);align-self:flex-start;margin-top:0.25rem;}
-        .p-n{font-family:'Playfair Display',serif;font-size:1.9rem;font-weight:700;color:var(--gold2);line-height:1;}
+        .p-n{font-family:var(--font-sans);font-size:1.9rem;font-weight:700;color:var(--gold2);line-height:1;}
         .p-p{font-size:0.68rem;color:var(--cream3);}
         .plan-seats2{font-size:0.58rem;letter-spacing:0.16em;text-transform:uppercase;color:var(--gold);margin-bottom:0.8rem;padding-bottom:0.7rem;border-bottom:1px solid var(--border);}
         .plan-list{list-style:none;margin-bottom:1.2rem;display:flex;flex-direction:column;gap:0.4rem;}
@@ -502,14 +521,14 @@ export default function Home() {
         .plan.hot .plan-btn:hover{background:var(--gold2);}
         .plan-adnote{font-size:0.58rem;color:var(--cream3);text-align:center;margin-top:0.4rem;}
         .cancel-bar{background:var(--bg3);border-top:1px solid var(--border);padding:clamp(1.2rem,2.5vw,1.8rem) clamp(1rem,4vw,3rem);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:1rem;}
-        .cancel-text{font-family:'Playfair Display',serif;font-size:clamp(0.85rem,2vw,1rem);font-style:italic;color:var(--cream);}
+        .cancel-text{font-family:var(--font-sans);font-size:clamp(0.85rem,2vw,1rem);font-style:italic;color:var(--cream);}
         .cancel-sub{font-size:0.72rem;color:var(--cream3);margin-top:0.2rem;}
         .cancel-sub strong{color:var(--gold);font-weight:400;}
 
         /* FOOTER */
         footer{background:var(--bg2);border-top:1px solid var(--border);padding:2rem clamp(1rem,4vw,3rem) 1.2rem;}
         .footer-grid{display:grid;grid-template-columns:2fr repeat(3,1fr);gap:1.8rem;margin-bottom:1.5rem;padding-bottom:1.5rem;border-bottom:1px solid var(--border);}
-        .f-brand{font-family:'Playfair Display',serif;font-size:1.1rem;font-weight:700;color:var(--cream);letter-spacing:0.08em;margin-bottom:0.15rem;}
+        .f-brand{font-family:var(--font-sans);font-size:1.1rem;font-weight:700;color:var(--cream);letter-spacing:0.08em;margin-bottom:0.15rem;}
         .f-tag{font-size:0.52rem;letter-spacing:0.4em;text-transform:uppercase;color:var(--gold);display:block;margin-bottom:0.6rem;}
         .f-desc{font-size:0.75rem;font-weight:300;color:var(--cream3);line-height:1.7;}
         .f-col-t{font-size:0.52rem;letter-spacing:0.35em;text-transform:uppercase;color:var(--gold);margin-bottom:0.7rem;}
@@ -528,7 +547,7 @@ export default function Home() {
         .mx{position:absolute;top:0.8rem;right:0.9rem;background:none;border:none;color:var(--cream3);font-size:1.2rem;cursor:pointer;padding:0.2rem 0.4rem;transition:color 0.2s;}
         .mx:hover{color:var(--cream);}
         .m-eye2{font-size:0.56rem;letter-spacing:0.35em;text-transform:uppercase;color:var(--gold);margin-bottom:0.4rem;}
-        .m-h2{font-family:'Playfair Display',serif;font-size:1.3rem;font-weight:700;color:var(--cream);margin-bottom:1.2rem;}
+        .m-h2{font-family:var(--font-sans);font-size:1.3rem;font-weight:700;color:var(--cream);margin-bottom:1.2rem;}
         .fg{display:flex;flex-direction:column;gap:0.26rem;margin-bottom:0.75rem;}
         .fg label{font-size:0.58rem;letter-spacing:0.2em;text-transform:uppercase;color:var(--cream3);}
         .fg input,.fg select{font-family:'Inter',sans-serif;font-size:0.82rem;padding:0.55rem 0.75rem;background:rgba(3,14,26,0.85);border:1px solid var(--border);color:var(--cream);outline:none;transition:border-color 0.2s;-webkit-appearance:none;}
@@ -563,15 +582,46 @@ export default function Home() {
         @keyframes up{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
         .fade{opacity:0;transform:translateY(10px);transition:opacity 0.55s,transform 0.55s;}
         .fade.in{opacity:1;transform:translateY(0);}
+
+        /* ── design-system refinements ───────────────────────────────── */
+        /* Tighter tracking on display/heading text now that it's Geist, not serif */
+        .hero-h,.page-h,.sec-h,.wc-name,.wcard-name,.mkt-watch-name,.wl-name,.plan-name,
+        .afb-title,.acct-section-title,.acct-name,.f-brand,.cancel-text,.feat-t,
+        .empty-title,.wl-card-title,.m-h2,.alert-card-watch,.logo,.hero-h em{letter-spacing:-0.022em;font-style:normal;}
+        .hero-h em,.page-h em,.sec-h em,.cancel-text{font-style:normal;}
+        /* Monospaced tabular figures on every number surface — digits align, nothing jitters */
+        .t-p,.wcard-price,.wcard-chg,.mkt-price,.wl-price,.wl-chg,.p-n,.p-d,.p-p,
+        .badge-up,.badge-dn{font-family:var(--font-mono);font-variant-numeric:tabular-nums;letter-spacing:0;}
+        .up{color:var(--green);}.down{color:var(--red);}
+        /* Gain/loss as restrained tinted pills (meaning never by color alone — ▲▼ stays) */
+        .badge-up{background:rgba(92,185,139,0.10);border-color:rgba(92,185,139,0.22);color:var(--green);border-radius:999px;}
+        .badge-dn{background:rgba(216,108,99,0.10);border-color:rgba(216,108,99,0.22);color:var(--red);border-radius:999px;}
+        /* Radius scale on standalone cards; data grids stay sharp (terminal feel) */
+        .wl-card,.acct-section,.account-sidebar,.alert-card,.alert-form-box,.dash-ticker,
+        .modal,.empty-state,.wcard-inner{border-radius:var(--r);}
+        .btn-sm,.btn-sm-gold,.btn-cta,.btn-outline,.mkt-filter,.afb-type,.afb-submit,
+        .m-submit,.plan-btn,.alert-btn,.add-wl-btn,.n-btn{border-radius:var(--r-sm);}
+        /* Restrained motion: 150ms interactions, no press-lift */
+        .btn-cta:hover{transform:none;}
+        a,button,.feat,.plan,.mkt-table tr,.nav-tab,.wl-card{transition-duration:0.15s;}
+        /* SVG icon sizing (replaced the former emoji) */
+        .tab-icon{display:inline-flex;align-items:center;justify-content:center;}
+        .tab-icon svg{width:15px;height:15px;}
+        .feat-icon svg{width:16px;height:16px;color:var(--gold);}
+        .acct-avatar svg{width:26px;height:26px;color:var(--gold);}
+        .wcard-fallback svg{width:36%;height:36%;color:var(--cream2);}
+        .wl-thumb svg{width:20px;height:20px;color:var(--gold2);}
+        .empty-icon svg{width:34px;height:34px;color:var(--cream3);}
+        @media (prefers-reduced-motion: reduce){*{animation:none !important;transition:none !important;}}
       `}</style>
 
       {/* ── TOP NAV ── */}
       <nav className="topnav">
         <a className="logo" href="#" onClick={(e) => { e.preventDefault(); (window as any).switchTab('home'); }}>WATCH<em>OUT</em></a>
         <div className="nav-tabs">
-          {[['home','🏠','Home'],['market','📈','Market'],['watchlists','📋','Watchlists'],['alerts','🔔','Alerts'],['account','👤','Account']].map(([id, icon, label]) => (
+          {[['home','Home'],['market','Market'],['watchlists','Watchlists'],['alerts','Alerts'],['account','Account']].map(([id, label]) => (
             <button key={id} className={`nav-tab${id === 'home' ? ' active' : ''}`} id={`tab-${id}`} onClick={() => (window as any).switchTab(id)}>
-              <span className="tab-icon">{icon}</span>{label}
+              <span className="tab-icon" dangerouslySetInnerHTML={{ __html: SVG[id] }} />{label}
             </button>
           ))}
         </div>
@@ -603,9 +653,9 @@ export default function Home() {
             <a href="#" className="btn-outline" onClick={(e) => { e.preventDefault(); (window as any).switchTab('market'); }}>Explore the Market</a>
           </div>
           <div className="features">
-            <div className="feat"><div className="feat-icon">📈</div><div className="feat-t">Hourly Price Updates</div><p className="feat-d">Every major marketplace scanned every 60 minutes.</p></div>
-            <div className="feat"><div className="feat-icon">🔔</div><div className="feat-t">SMS &amp; Email Alerts</div><p className="feat-d">Set a target. Get notified the moment it hits.</p></div>
-            <div className="feat"><div className="feat-icon">📋</div><div className="feat-t">Personal Watchlists</div><p className="feat-d">Track any watch by brand, model, or reference.</p></div>
+            <div className="feat"><div className="feat-icon" dangerouslySetInnerHTML={{ __html: SVG.trending }} /><div className="feat-t">Hourly Price Updates</div><p className="feat-d">Every major marketplace scanned every 60 minutes.</p></div>
+            <div className="feat"><div className="feat-icon" dangerouslySetInnerHTML={{ __html: SVG.alerts }} /><div className="feat-t">SMS &amp; Email Alerts</div><p className="feat-d">Set a target. Get notified the moment it hits.</p></div>
+            <div className="feat"><div className="feat-icon" dangerouslySetInnerHTML={{ __html: SVG.watchlists }} /><div className="feat-t">Personal Watchlists</div><p className="feat-d">Track any watch by brand, model, or reference.</p></div>
           </div>
         </section>
         <div className="ticker-bar">
@@ -698,13 +748,13 @@ export default function Home() {
               <div><label className="afb-label">Phone (SMS — optional)</label><input className="afb-input" id="al-phone" type="tel" placeholder="+1 (555) 000-0000" /></div>
             </div>
             <div className="afb-types">
-              <button className="afb-type on" id="alt-e" onClick={() => (window as any).setAltType('email')}>📧 Email</button>
-              <button className="afb-type" id="alt-s" onClick={() => (window as any).setAltType('sms')}>📱 SMS</button>
+              <button className="afb-type on" id="alt-e" onClick={() => (window as any).setAltType('email')}>Email</button>
+              <button className="afb-type" id="alt-s" onClick={() => (window as any).setAltType('sms')}>SMS</button>
               <button className="afb-type" id="alt-b" onClick={() => (window as any).setAltType('both')}>Both</button>
             </div>
             <button className="afb-submit" onClick={() => (window as any).addAlert()}>Set Alert →</button>
           </div>
-          <h3 style={{ fontFamily: "'Playfair Display',serif", fontSize: '0.9rem', color: 'var(--cream)', marginBottom: '0.8rem', fontWeight: 500 }}>Active Alerts</h3>
+          <h3 style={{ fontFamily: "var(--font-sans)", fontSize: '0.9rem', color: 'var(--cream)', marginBottom: '0.8rem', fontWeight: 500 }}>Active Alerts</h3>
           <div className="alerts-list" id="alertsList"></div>
         </div>
       </div>
@@ -715,7 +765,7 @@ export default function Home() {
           <div className="page-head"><p className="page-eye">Profile</p><h2 className="page-h">Your <em>Account</em></h2><div className="rule"></div></div>
           <div className="account-grid">
             <div className="account-sidebar">
-              <div className="acct-avatar">👤</div>
+              <div className="acct-avatar" dangerouslySetInnerHTML={{ __html: SVG.account }} />
               <div className="acct-name">Early Access User</div>
               <div className="acct-plan">Beta · Personal Plan</div>
               <ul className="acct-menu">
@@ -729,7 +779,7 @@ export default function Home() {
             </div>
             <div className="account-main">
               <div className="acct-section">
-                <div className="acct-section-title">📋 Plan Details</div>
+                <div className="acct-section-title">Plan Details</div>
                 <div className="acct-row"><span className="acct-row-label">Current Plan</span><span style={{ color: 'var(--gold)' }}>Personal — $19.99/mo</span></div>
                 <div className="acct-row"><span className="acct-row-label">Users</span><span>1 of 2 used</span></div>
                 <div className="acct-row"><span className="acct-row-label">Next Billing</span><span>April 25, 2026</span></div>
@@ -737,13 +787,13 @@ export default function Home() {
                 <div className="acct-row"><span className="acct-row-label">Cancel</span><button className="cancel-link" onClick={() => (window as any).confirmCancel()}>Cancel in one click →</button></div>
               </div>
               <div className="acct-section">
-                <div className="acct-section-title">🔔 Alert Preferences</div>
+                <div className="acct-section-title">Alert Preferences</div>
                 <div className="acct-row"><span className="acct-row-label">Email Alerts</span><span style={{ color: 'var(--green)' }}>On</span></div>
                 <div className="acct-row"><span className="acct-row-label">SMS Alerts</span><span>Off — add phone number</span></div>
                 <div className="acct-row"><span className="acct-row-label">Frequency</span><span>Immediately (hourly scan)</span></div>
               </div>
               <div className="acct-section">
-                <div className="acct-section-title">📈 Your Activity</div>
+                <div className="acct-section-title">Your Activity</div>
                 <div className="acct-row"><span className="acct-row-label">Watchlist Items</span><span>4</span></div>
                 <div className="acct-row"><span className="acct-row-label">Active Alerts</span><span>2</span></div>
                 <div className="acct-row"><span className="acct-row-label">Member Since</span><span>March 2026</span></div>
