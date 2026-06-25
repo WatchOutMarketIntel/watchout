@@ -612,6 +612,8 @@ export default function Home() {
         .wcard-fallback svg{width:36%;height:36%;color:var(--cream2);}
         .wl-thumb svg{width:20px;height:20px;color:var(--gold2);}
         .empty-icon svg{width:34px;height:34px;color:var(--cream3);}
+        /* Hide the center "Now Showing" winder label — the front card self-labels */
+        .wc{display:none;}
         @media (prefers-reduced-motion: reduce){*{animation:none !important;transition:none !important;}}
       `}</style>
 
