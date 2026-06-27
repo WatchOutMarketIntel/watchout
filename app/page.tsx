@@ -37,6 +37,28 @@ export default function Home() {
     const fmt = (p: number) => '$' + p.toLocaleString();
     const fmtChg = (c: number) => (c >= 0 ? '▲ +' : '▼ ') + Math.abs(c).toFixed(1) + '%';
 
+    // Tiny inline sparkline — maps a short price series (oldest→newest, from the
+    // API's /market/history) to an SVG line. Green if the series ends up, red if
+    // down. Shows a dash when there aren't yet ≥2 snapshots to draw a trend.
+    const sparkline = (prices?: number[]) => {
+      if (!prices || prices.length < 2) return '<span class="spark-empty">—</span>';
+      const W = 88, H = 28, pad = 3;
+      const min = Math.min(...prices), max = Math.max(...prices);
+      const span = max - min || 1;            // flat series → avoid /0, draws a flat line
+      const n = prices.length;
+      const xy = (p: number, i: number) => {
+        const x = pad + (i / (n - 1)) * (W - pad * 2);
+        const y = pad + (1 - (p - min) / span) * (H - pad * 2);
+        return [x, y] as const;
+      };
+      const pts = prices.map((p, i) => xy(p, i).map(v => v.toFixed(1)).join(',')).join(' ');
+      const [lx, ly] = xy(prices[n - 1], n - 1);
+      const color = prices[n - 1] >= prices[0] ? '#5CB98B' : '#D86C63';
+      return `<svg class="spark" viewBox="0 0 ${W} ${H}" aria-hidden="true">`
+        + `<polyline points="${pts}" fill="none" stroke="${color}" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>`
+        + `<circle cx="${lx.toFixed(1)}" cy="${ly.toFixed(1)}" r="1.7" fill="${color}"/></svg>`;
+    };
+
     // Everything below renders from whatever watch list it's given (live or placeholder).
     const init = (WATCHES: any[]) => {
     // ── TAB SYSTEM ──
@@ -168,7 +190,7 @@ export default function Home() {
           <td style="color:rgba(232,224,208,0.3);font-size:0.75rem">${i + 1}</td>
           <td><div class="mkt-watch-name">${w.name}</div><div class="mkt-brand">${w.brand} · ${w.ref}</div></td>
           <td class="mkt-price">${fmt(w.price)}</td>
-          <td><span class="${w.change >= 0 ? 'badge-up' : 'badge-dn'}">${fmtChg(w.change)}</span></td>
+          <td><div class="mkt-trend">${sparkline((w as any).spark)}<span class="${w.change >= 0 ? 'badge-up' : 'badge-dn'}">${fmtChg(w.change)}</span></div></td>
           <td style="color:rgba(232,224,208,0.3);font-size:0.72rem">${(w as any).count != null ? (w as any).count : Math.floor(Math.random() * 200 + 20)} listings</td>
           <td><button class="alert-btn" onclick="openModal()">+ Alert</button></td>
         </tr>`).join('');
@@ -282,10 +304,24 @@ export default function Home() {
     // no data yet), we fall back to the placeholder list so the page still works.
     const API = (process.env.NEXT_PUBLIC_API_URL || 'https://watchout-api-production.up.railway.app').replace(/\/+$/, '');
     let cancelled = false;
-    fetch(`${API}/market`)
-      .then(r => (r.ok ? r.json() : Promise.reject(r.status)))
-      .then(d => {
+    const wkey = (b: string, n: string, r: string) => `${b}|${n}|${r || ''}`;
+
+    // Fetch live prices AND price history together. /market drives the prices;
+    // /market/history feeds the sparklines. If history fails we still render
+    // everything — the sparklines just show a dash until snapshots accumulate.
+    Promise.all([
+      fetch(`${API}/market`).then(r => (r.ok ? r.json() : Promise.reject(r.status))),
+      fetch(`${API}/market/history?points=24`)
+        .then(r => (r.ok ? r.json() : { history: [] }))
+        .catch(() => ({ history: [] })),
+    ])
+      .then(([d, h]: any[]) => {
         if (cancelled) return;
+        // Index each watch's price series by brand|name|ref so we can attach it.
+        const sparks: Record<string, number[]> = {};
+        (h.history || []).forEach((s: any) => {
+          sparks[wkey(s.brand, s.name, s.ref)] = s.prices || [];
+        });
         const live = (d.watches || []).map((w: any) => ({
           brand: w.brand,
           name: w.name,
@@ -293,6 +329,7 @@ export default function Home() {
           price: Number(w.price) || 0,
           change: Number(w.change) || 0,
           count: w.num_listings,
+          spark: sparks[wkey(w.brand, w.name, w.ref)] || [],
           img: '',
           fb: '⌚',
         }));
@@ -414,6 +451,9 @@ export default function Home() {
         .mkt-table td{padding:0.75rem 1rem;border-bottom:1px solid var(--border);font-size:0.8rem;vertical-align:middle;}
         .mkt-table tr:last-child td{border-bottom:none;}
         .mkt-table tr:hover td{background:rgba(10,30,48,0.5);}
+        .mkt-trend{display:flex;align-items:center;gap:0.7rem;}
+        .spark{width:88px;height:28px;display:block;flex:none;overflow:visible;}
+        .spark-empty{width:88px;flex:none;display:inline-block;text-align:center;color:var(--cream3);font-family:var(--font-mono);font-size:0.72rem;}
         .mkt-watch-name{font-family:var(--font-sans);font-size:0.82rem;font-weight:500;color:var(--cream);}
         .mkt-brand{font-size:0.6rem;color:var(--cream3);letter-spacing:0.08em;margin-top:1px;}
         .mkt-price{font-weight:500;color:var(--gold2);}
