@@ -211,7 +211,9 @@ export default function Home() {
           <div class="wl-card-head"><div class="wl-card-title">My Collection Targets</div><div class="wl-card-count">${myWatchlist.length} Watches</div></div>
           ${myWatchlist.map(w => `
             <div class="wl-row">
-              <div class="wl-thumb">${w.img ? `<img src="${w.img}" alt="${w.name}">` : SVG.watch}</div>
+              <div class="wl-thumb">${w.img
+                ? `<img src="${w.img}" alt="${w.name}" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"/><span class="wl-thumb-fb" style="display:none">${SVG.watch}</span>`
+                : `<span class="wl-thumb-fb" style="display:flex">${SVG.watch}</span>`}</div>
               <div class="wl-info"><div class="wl-name">${w.name}</div><div class="wl-ref">${w.brand} · ${w.ref}</div></div>
               <div><div class="wl-price">${fmt(w.price)}</div><div class="wl-chg ${w.change >= 0 ? 'up' : 'down'}">${fmtChg(w.change)}</div></div>
             </div>`).join('')}
@@ -330,7 +332,7 @@ export default function Home() {
           change: Number(w.change) || 0,
           count: w.num_listings,
           spark: sparks[wkey(w.brand, w.name, w.ref)] || [],
-          img: '',
+          img: w.image_url || '',
           fb: '⌚',
         }));
         init(live.length ? live : PLACEHOLDER);
@@ -472,6 +474,7 @@ export default function Home() {
         .wl-row:last-of-type{border-bottom:none;}
         .wl-thumb{width:40px;height:40px;border-radius:8px;background:var(--bg4);border:1px solid rgba(201,168,76,0.15);overflow:hidden;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:1.1rem;}
         .wl-thumb img{width:100%;height:100%;object-fit:cover;}
+        .wl-thumb-fb{align-items:center;justify-content:center;width:100%;height:100%;}
         .wl-info{flex:1;min-width:0;}
         .wl-name{font-family:var(--font-sans);font-size:0.78rem;font-weight:500;color:var(--cream);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
         .wl-ref{font-size:0.6rem;color:var(--cream3);}
