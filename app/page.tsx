@@ -1,6 +1,7 @@
 'use client';
 import { useEffect } from 'react';
 import LiveDial from './LiveDial';
+import { nickOf } from './nicknames';
 
 // Inline Lucide-style SVG icons — consistent 1.6 stroke, colored via currentColor.
 const _svg = (inner: string) =>
@@ -29,20 +30,6 @@ const FEATURED = {
   image: '',  // optional override; falls back to live data / SVG if empty
   blurb: 'The Moonwatch — hand-wound, the only chronograph flight-qualified by NASA. A reference point for the whole sports-chronograph market.',
   cta: 'See it on the market',
-};
-
-// Curated reference → collector nickname map (expandable). Keys are normalised
-// (uppercased, spaces stripped) at lookup so "310.30.42.50.01.001" etc. match.
-const NICKNAMES: Record<string, string> = {
-  '126710BLNR': 'Batman', '126710BLRO': 'Pepsi', '126610LV': 'Kermit',
-  '116610LV': 'Hulk', '116500LN': 'Panda', '226570': 'Polar',
-  '310.30.42.50.01.001': 'Moonwatch', 'M79030N': 'Black Bay 58',
-  '15202': 'Jumbo', 'SBGA211': 'Snowflake', 'SLGH005': 'White Birch',
-};
-const nickOf = (ref?: string) => {
-  if (!ref) return '';
-  const key = ref.toUpperCase().replace(/\s+/g, '');
-  return NICKNAMES[key] || '';
 };
 
 export default function Home() {
@@ -79,6 +66,9 @@ export default function Home() {
     };
     // Small nickname badge markup (empty string when the ref has no nickname).
     const nickBadge = (w: any) => w.nickname ? `<span class="nick">${w.nickname}</span>` : '';
+    // Cards link INTO the watch's detail page; only fall back to the eBay search
+    // for placeholder rows that have no id (API down).
+    const watchUrl = (w: any) => w.id ? `/w/${w.id}` : ebayUrl(w);
 
     // Reusable photo markup with the clean SVG fallback (missing OR failed load).
     const photoInner = (w: any, imgCls: string, fbCls: string) => w.img
@@ -151,7 +141,7 @@ export default function Home() {
         node.className = 'wcard';
         node.id = `wc${i}`;
         node.innerHTML =
-          `<a class="wcard-inner" href="${ebayUrl(w)}" target="_blank" rel="noopener noreferrer" aria-label="${w.brand} ${w.name} on eBay">`
+          `<a class="wcard-inner" href="${watchUrl(w)}" aria-label="${w.brand} ${w.name} details">`
           + `<div class="wcard-photo">${photoInner(w, 'wcard-img', 'wcard-fallback')}</div>`
           + `<div class="wcard-info"><div class="wcard-brand">${w.brand}</div>`
           + `<div class="wcard-name">${w.name}${nickBadge(w)}</div>`
@@ -250,7 +240,7 @@ export default function Home() {
     const preview = document.getElementById('previewBody');
     if (preview) {
       preview.innerHTML = oneEachBrand.slice(0, 5).map(w => `
-        <a class="pv-row" href="${ebayUrl(w)}" target="_blank" rel="noopener noreferrer">
+        <a class="pv-row" href="${watchUrl(w)}">
           <div class="pv-photo">${photoInner(w, 'pv-img', 'pv-fb')}</div>
           <div class="pv-id"><div class="pv-name">${w.name}${nickBadge(w)}</div><div class="pv-ref">${w.brand}${w.ref ? ' · ' + w.ref : ''}</div></div>
           <div class="pv-price">${fmt(w.price)}</div>
@@ -262,7 +252,7 @@ export default function Home() {
     const spot = document.getElementById('spotlightGrid');
     if (spot) {
       spot.innerHTML = oneEachBrand.slice(0, 4).map(w => `
-        <a class="spot-card" href="${ebayUrl(w)}" target="_blank" rel="noopener noreferrer">
+        <a class="spot-card" href="${watchUrl(w)}">
           <div class="spot-photo">${photoInner(w, 'spot-img', 'spot-fb')}</div>
           <div class="spot-body">
             <div class="spot-brand">${w.brand}</div>
@@ -292,7 +282,7 @@ export default function Home() {
         <tr>
           <td class="mkt-rank">${i + 1}</td>
           <td>
-            <a class="mkt-id" href="${ebayUrl(w)}" target="_blank" rel="noopener noreferrer">
+            <a class="mkt-id" href="${watchUrl(w)}">
               <span class="mkt-photo">${photoInner(w, 'mkt-img', 'mkt-fb')}</span>
               <span><span class="mkt-watch-name">${w.name}${nickBadge(w)}</span><span class="mkt-brand">${w.brand}${w.ref ? ' · ' + w.ref : ''}</span></span>
             </a>
@@ -318,7 +308,7 @@ export default function Home() {
         <div class="wl-card">
           <div class="wl-card-head"><div class="wl-card-title">My Collection Targets</div><div class="wl-card-count">${myWatchlist.length} Watches</div></div>
           ${myWatchlist.map(w => `
-            <a class="wl-row" href="${ebayUrl(w)}" target="_blank" rel="noopener noreferrer">
+            <a class="wl-row" href="${watchUrl(w)}">
               <div class="wl-thumb">${photoInner(w, 'wl-img', 'wl-thumb-fb')}</div>
               <div class="wl-info"><div class="wl-name">${w.name}${nickBadge(w)}</div><div class="wl-ref">${w.brand}${w.ref ? ' · ' + w.ref : ''}</div></div>
               <div><div class="wl-price">${fmt(w.price)}</div><div class="wl-chg ${chgClass(w.change)}">${fmtChg(w.change)}</div></div>
@@ -428,6 +418,27 @@ export default function Home() {
         init(live.length ? live : PLACEHOLDER);
       })
       .catch(() => { if (!cancelled) init(PLACEHOLDER); });
+
+    // WatchOut Index headline band — independent of the market fetch; hides
+    // itself if there's no index yet so nothing ever looks broken.
+    fetch(`${API}/index?points=30`)
+      .then(r => (r.ok ? r.json() : null))
+      .then(idx => {
+        const el = document.getElementById('indexBand');
+        if (cancelled || !el || !idx || idx.value == null) return;
+        const c = idx.change_24h;
+        const cls = c == null ? 'flat' : (c >= 0 ? 'up' : 'down');
+        const chg = c == null ? '—' : (c >= 0 ? '▲ +' : '▼ ') + Math.abs(c).toFixed(2) + '%';
+        el.innerHTML =
+          `<span class="idx-label">WatchOut Index</span>`
+          + `<span class="idx-val">${idx.value.toFixed(2)}</span>`
+          + `<span class="idx-chg ${cls}">${chg}<span class="idx-win">24h</span></span>`
+          + `<span class="idx-spark">${sparkline(idx.series)}</span>`
+          + `<span class="idx-meta">${idx.constituents || 0} refs · base 100</span>`;
+        el.classList.add('on');
+      })
+      .catch(() => { /* no index yet — band stays hidden */ });
+
     return () => { cancelled = true; };
   }, []);
 
@@ -490,6 +501,17 @@ export default function Home() {
         .hero-cta:hover{background:#000;}
         .hero-dial{display:flex;justify-content:center;align-items:center;}
         .hero-dial svg{width:min(360px,80vw);height:auto;}
+
+        /* WATCHOUT INDEX BAND */
+        .idx-band{display:none;align-items:center;gap:clamp(0.8rem,2.5vw,1.8rem);flex-wrap:wrap;padding:0.9rem clamp(1rem,4vw,3rem);background:var(--surface);border-bottom:1px solid var(--line);}
+        .idx-band.on{display:flex;}
+        .idx-label{font-size:0.66rem;font-weight:600;letter-spacing:0.18em;text-transform:uppercase;color:var(--red);}
+        .idx-val{font-family:var(--serif);font-size:1.5rem;font-weight:600;color:var(--ink);line-height:1;}
+        .idx-chg{font-size:0.85rem;font-weight:600;display:inline-flex;align-items:baseline;gap:0.35rem;}
+        .idx-win{font-size:0.6rem;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;color:var(--ink-3);}
+        .idx-spark{display:inline-flex;align-items:center;}
+        .idx-spark .spark{width:120px;height:26px;}
+        .idx-meta{font-size:0.72rem;color:var(--ink-3);margin-left:auto;}
 
         /* MOVERS TURNSTILE */
         .winder-wrap{width:min(620px,94vw);height:min(300px,52vw);position:relative;margin:0.5rem auto 0;}
@@ -795,6 +817,9 @@ export default function Home() {
             <div className="hero-dial"><LiveDial size={340} /></div>
           </div>
         </section>
+
+        {/* WatchOut Index — slim headline band (populated from /index) */}
+        <div className="idx-band" id="indexBand"></div>
 
         {/* Today's movers turnstile */}
         <section className="band fade">
