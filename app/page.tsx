@@ -31,6 +31,20 @@ const FEATURED = {
   cta: 'See it on the market',
 };
 
+// Curated reference → collector nickname map (expandable). Keys are normalised
+// (uppercased, spaces stripped) at lookup so "310.30.42.50.01.001" etc. match.
+const NICKNAMES: Record<string, string> = {
+  '126710BLNR': 'Batman', '126710BLRO': 'Pepsi', '126610LV': 'Kermit',
+  '116610LV': 'Hulk', '116500LN': 'Panda', '226570': 'Polar',
+  '310.30.42.50.01.001': 'Moonwatch', 'M79030N': 'Black Bay 58',
+  '15202': 'Jumbo', 'SBGA211': 'Snowflake', 'SLGH005': 'White Birch',
+};
+const nickOf = (ref?: string) => {
+  if (!ref) return '';
+  const key = ref.toUpperCase().replace(/\s+/g, '');
+  return NICKNAMES[key] || '';
+};
+
 export default function Home() {
   useEffect(() => {
     // ── WATCH DATA (placeholder; replaced by live data from the API below) ──
@@ -48,15 +62,23 @@ export default function Home() {
     ];
 
     const fmt = (p: number) => '$' + Math.round(p).toLocaleString();
-    const fmtChg = (c: number) => (c >= 0 ? '▲ +' : '▼ ') + Math.abs(c).toFixed(1) + '%';
+    // Change is a real 24h-window % (or null when there isn't ≥24h of history).
+    // Null renders as a neutral "—" rather than a misleading +0.0%.
+    const fmtChg = (c: number | null | undefined) =>
+      (c == null) ? '—' : (c >= 0 ? '▲ +' : '▼ ') + Math.abs(c).toFixed(1) + '%';
+    const chgClass = (c: number | null | undefined) =>
+      (c == null) ? 'flat' : (c >= 0 ? 'up' : 'down');
 
-    // A durable eBay link for a watch: a category-scoped search by brand/model/
-    // ref. Used as the "shown in context" attribution — it never 404s the way a
-    // single ended listing would. (Hold standalone marketing use pending review.)
+    // Link a watch to its EXACT eBay listing (the one its photo came from). Falls
+    // back to a durable category-scoped search only when we have no listing_url
+    // yet — that never 404s the way a single ended listing can.
     const ebayUrl = (w: any) => {
+      if (w.listing_url) return w.listing_url;
       const q = [w.brand, w.name, w.ref].filter(Boolean).join(' ');
       return `https://www.ebay.com/sch/i.html?_nkw=${encodeURIComponent(q)}&_sacat=31387`;
     };
+    // Small nickname badge markup (empty string when the ref has no nickname).
+    const nickBadge = (w: any) => w.nickname ? `<span class="nick">${w.nickname}</span>` : '';
 
     // Reusable photo markup with the clean SVG fallback (missing OR failed load).
     const photoInner = (w: any, imgCls: string, fbCls: string) => w.img
@@ -95,13 +117,19 @@ export default function Home() {
     };
     (window as any).switchTab = switchTab;
 
-    // One representative watch PER BRAND, in the catalog's existing order (ranked
-    // by listing volume). Keeps the home showcase varied instead of repeating the
-    // single most-listed reference six times.
+    // One representative watch PER BRAND. Within a brand we prefer a watch that
+    // actually has a 24h change (a real mover) and, among those, the most liquid
+    // — so the home surfaces live movement and variety instead of a wall of "—"
+    // or six copies of one reference.
     const oneEachBrand = (() => {
+      const ranked = [...WATCHES].sort((a, b) => {
+        const ah = a.change == null ? 0 : 1, bh = b.change == null ? 0 : 1;
+        if (ah !== bh) return bh - ah;                 // has a 24h change first
+        return (b.count || 0) - (a.count || 0);        // then most liquid
+      });
       const seen = new Set<string>();
       const out: any[] = [];
-      for (const w of WATCHES) { if (w.brand && !seen.has(w.brand)) { seen.add(w.brand); out.push(w); } }
+      for (const w of ranked) { if (w.brand && !seen.has(w.brand)) { seen.add(w.brand); out.push(w); } }
       return out;
     })();
     // "Most active" = the biggest absolute daily movers, capped at 12. Until price
@@ -126,9 +154,9 @@ export default function Home() {
           `<a class="wcard-inner" href="${ebayUrl(w)}" target="_blank" rel="noopener noreferrer" aria-label="${w.brand} ${w.name} on eBay">`
           + `<div class="wcard-photo">${photoInner(w, 'wcard-img', 'wcard-fallback')}</div>`
           + `<div class="wcard-info"><div class="wcard-brand">${w.brand}</div>`
-          + `<div class="wcard-name">${w.name}</div>`
+          + `<div class="wcard-name">${w.name}${nickBadge(w)}</div>`
           + `<div class="wcard-row"><span class="wcard-price">${fmt(w.price)}</span>`
-          + `<span class="${w.change >= 0 ? 'up' : 'down'}">${fmtChg(w.change)}</span></div></div></a>`;
+          + `<span class="${chgClass(w.change)}">${fmtChg(w.change)}</span></div></div></a>`;
         scene.appendChild(node);
       });
 
@@ -148,7 +176,9 @@ export default function Home() {
         const wrap = document.querySelector('.winder-wrap') as HTMLElement;
         if (!wrap) return;
         const W = wrap.offsetWidth, H = wrap.offsetHeight;
-        const rX = W * 0.42, rY = H * 0.18;
+        // rY = 0 → cards travel on a single horizontal line (no vertical/diagonal
+        // drift). The depth/scale carousel still reads as motion, purely sideways.
+        const rX = W * 0.42, rY = 0;
         const cardW = Math.min(150, W * 0.26);
 
         const cards = winderWatches.map((w, i) => {
@@ -201,7 +231,7 @@ export default function Home() {
       [...mostActive, ...mostActive, ...mostActive].forEach(w => {
         const item = document.createElement('span');
         item.className = 'ticker-item';
-        item.innerHTML = `<span class="t-s">${w.brand.toUpperCase()}</span><span class="t-p">${fmt(w.price)}</span><span class="${w.change >= 0 ? 'up' : 'down'}">${fmtChg(w.change)}</span>`;
+        item.innerHTML = `<span class="t-s">${w.brand.toUpperCase()}</span><span class="t-p">${fmt(w.price)}</span><span class="${chgClass(w.change)}">${fmtChg(w.change)}</span>`;
         ticker.appendChild(item);
       });
     }
@@ -211,7 +241,7 @@ export default function Home() {
       [...six, ...six, ...six].forEach(w => {
         const item = document.createElement('span');
         item.className = 'dt-item';
-        item.innerHTML = `<span class="dt-n">${w.name}</span><span class="dt-p">${fmt(w.price)}</span><span class="${w.change >= 0 ? 'up' : 'down'}">${fmtChg(w.change)}</span>`;
+        item.innerHTML = `<span class="dt-n">${w.name}</span><span class="dt-p">${fmt(w.price)}</span><span class="${chgClass(w.change)}">${fmtChg(w.change)}</span>`;
         dashTicker.appendChild(item);
       });
     }
@@ -222,9 +252,9 @@ export default function Home() {
       preview.innerHTML = oneEachBrand.slice(0, 5).map(w => `
         <a class="pv-row" href="${ebayUrl(w)}" target="_blank" rel="noopener noreferrer">
           <div class="pv-photo">${photoInner(w, 'pv-img', 'pv-fb')}</div>
-          <div class="pv-id"><div class="pv-name">${w.name}</div><div class="pv-ref">${w.brand}${w.ref ? ' · ' + w.ref : ''}</div></div>
+          <div class="pv-id"><div class="pv-name">${w.name}${nickBadge(w)}</div><div class="pv-ref">${w.brand}${w.ref ? ' · ' + w.ref : ''}</div></div>
           <div class="pv-price">${fmt(w.price)}</div>
-          <div class="pv-chg ${w.change >= 0 ? 'up' : 'down'}">${fmtChg(w.change)}</div>
+          <div class="pv-chg ${chgClass(w.change)}">${fmtChg(w.change)}</div>
         </a>`).join('');
     }
 
@@ -236,9 +266,9 @@ export default function Home() {
           <div class="spot-photo">${photoInner(w, 'spot-img', 'spot-fb')}</div>
           <div class="spot-body">
             <div class="spot-brand">${w.brand}</div>
-            <div class="spot-name">${w.name}</div>
+            <div class="spot-name">${w.name}${nickBadge(w)}</div>
             <div class="spot-ref">${w.ref || '—'}</div>
-            <div class="spot-row"><span class="spot-price">${fmt(w.price)}</span><span class="${w.change >= 0 ? 'up' : 'down'}">${fmtChg(w.change)}</span></div>
+            <div class="spot-row"><span class="spot-price">${fmt(w.price)}</span><span class="${chgClass(w.change)}">${fmtChg(w.change)}</span></div>
           </div>
         </a>`).join('');
     }
@@ -264,11 +294,11 @@ export default function Home() {
           <td>
             <a class="mkt-id" href="${ebayUrl(w)}" target="_blank" rel="noopener noreferrer">
               <span class="mkt-photo">${photoInner(w, 'mkt-img', 'mkt-fb')}</span>
-              <span><span class="mkt-watch-name">${w.name}</span><span class="mkt-brand">${w.brand}${w.ref ? ' · ' + w.ref : ''}</span></span>
+              <span><span class="mkt-watch-name">${w.name}${nickBadge(w)}</span><span class="mkt-brand">${w.brand}${w.ref ? ' · ' + w.ref : ''}</span></span>
             </a>
           </td>
           <td class="mkt-price">${fmt(w.price)}</td>
-          <td><div class="mkt-trend">${sparkline((w as any).spark)}<span class="${w.change >= 0 ? 'badge-up' : 'badge-dn'}">${fmtChg(w.change)}</span></div></td>
+          <td><div class="mkt-trend">${sparkline((w as any).spark)}<span class="${w.change == null ? 'badge-flat' : (w.change >= 0 ? 'badge-up' : 'badge-dn')}">${fmtChg(w.change)}</span></div></td>
           <td class="mkt-vol">${(w as any).count != null ? (w as any).count : '—'} listings</td>
           <td><button class="alert-btn" onclick="openModal()">+ Alert</button></td>
         </tr>`).join('');
@@ -290,8 +320,8 @@ export default function Home() {
           ${myWatchlist.map(w => `
             <a class="wl-row" href="${ebayUrl(w)}" target="_blank" rel="noopener noreferrer">
               <div class="wl-thumb">${photoInner(w, 'wl-img', 'wl-thumb-fb')}</div>
-              <div class="wl-info"><div class="wl-name">${w.name}</div><div class="wl-ref">${w.brand}${w.ref ? ' · ' + w.ref : ''}</div></div>
-              <div><div class="wl-price">${fmt(w.price)}</div><div class="wl-chg ${w.change >= 0 ? 'up' : 'down'}">${fmtChg(w.change)}</div></div>
+              <div class="wl-info"><div class="wl-name">${w.name}${nickBadge(w)}</div><div class="wl-ref">${w.brand}${w.ref ? ' · ' + w.ref : ''}</div></div>
+              <div><div class="wl-price">${fmt(w.price)}</div><div class="wl-chg ${chgClass(w.change)}">${fmtChg(w.change)}</div></div>
             </a>`).join('')}
           <div class="wl-live"><span class="live-dot"></span>Updated hourly</div>
         </div>`;
@@ -382,14 +412,18 @@ export default function Home() {
         const sparks: Record<string, number[]> = {};
         (h.history || []).forEach((s: any) => { sparks[wkey(s.brand, s.name, s.ref)] = s.prices || []; });
         const live = (d.watches || []).map((w: any) => ({
+          id: w.id,
           brand: w.brand,
           name: w.name,
           ref: w.ref || '',
+          nickname: nickOf(w.ref),
           price: Number(w.price) || 0,
-          change: Number(w.change) || 0,
+          change: w.change == null ? null : Number(w.change),      // 24h window (nullable)
+          change7d: w.change_7d == null ? null : Number(w.change_7d),
           count: w.num_listings,
           spark: sparks[wkey(w.brand, w.name, w.ref)] || [],
           img: w.image_url || '',
+          listing_url: w.listing_url || '',
         }));
         init(live.length ? live : PLACEHOLDER);
       })
@@ -417,7 +451,9 @@ export default function Home() {
         body{font-family:var(--sans);background:var(--paper);color:var(--ink);overflow-x:hidden;font-variant-numeric:tabular-nums;-webkit-font-smoothing:antialiased;line-height:1.5;}
         a{color:inherit;text-decoration:none;}
         .num{font-variant-numeric:tabular-nums;}
-        .up{color:var(--gain);}.down{color:var(--red);}
+        .up{color:var(--gain);}.down{color:var(--red);}.flat{color:var(--ink-3);}
+        /* Nickname badge — small, quiet, sits beside the model name */
+        .nick{display:inline-block;margin-left:0.5rem;font-family:var(--sans);font-size:0.6rem;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;color:var(--red);background:rgba(168,54,43,0.08);border:1px solid rgba(168,54,43,0.25);border-radius:999px;padding:0.08rem 0.42rem;vertical-align:middle;white-space:nowrap;}
 
         /* NAV */
         .topnav{position:fixed;top:0;left:0;right:0;z-index:300;height:60px;background:rgba(243,236,219,0.9);backdrop-filter:blur(10px);border-bottom:1px solid var(--line);display:flex;align-items:center;padding:0 clamp(1rem,3vw,2.5rem);gap:clamp(0.5rem,2vw,1.5rem);}
@@ -557,6 +593,7 @@ export default function Home() {
         .badge-up,.badge-dn{display:inline-block;font-size:0.74rem;font-weight:600;padding:0.16rem 0.55rem;border-radius:999px;border:1px solid;}
         .badge-up{color:var(--gain);border-color:rgba(62,125,90,0.3);background:rgba(62,125,90,0.08);}
         .badge-dn{color:var(--red);border-color:rgba(168,54,43,0.3);background:rgba(168,54,43,0.08);}
+        .badge-flat{color:var(--ink-3);border-color:var(--line);background:transparent;}
         .alert-btn{font-size:0.78rem;padding:0.36rem 0.8rem;background:transparent;border:1px solid var(--line);color:var(--ink-2);cursor:pointer;transition:all 0.15s;white-space:nowrap;}
         .alert-btn:hover{border-color:var(--red);color:var(--red);}
 
