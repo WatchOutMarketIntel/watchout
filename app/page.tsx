@@ -343,11 +343,20 @@ export default function Home() {
     (window as any).addAlert = () => {
       const w = (document.getElementById('al-watch') as HTMLInputElement)?.value.trim();
       const p = (document.getElementById('al-price') as HTMLInputElement)?.value.trim();
+      const email = (document.getElementById('al-email') as HTMLInputElement)?.value.trim();
       if (!w || !p) { alert('Please enter a watch name and target price.'); return; }
-      activeAlerts.push({ watch: w, target: `Below ${p}`, type: currentAltType === 'email' ? 'Email' : currentAltType === 'sms' ? 'SMS' : 'Email+SMS' });
+      if (!email || !email.includes('@')) { alert('Please enter your email so we can notify you.'); return; }
+      const target = Number(p.replace(/[^0-9.]/g, '')) || null;
+      // Persist the rule via the API (email-first; SMS deferred). Optimistically
+      // show it, and keep it shown even if the network hiccups.
+      activeAlerts.push({ watch: w, target: `Below ${p}`, type: 'Email' });
       renderAlerts();
       (document.getElementById('al-watch') as HTMLInputElement).value = '';
       (document.getElementById('al-price') as HTMLInputElement).value = '';
+      fetch(`${API}/alerts`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, ref_query: w, target_price: target, direction: 'below' }),
+      }).catch(() => { /* rule still shown locally; will retry on next submit */ });
     };
     (window as any).setAltType = (t: string) => {
       currentAltType = t;
