@@ -49,7 +49,7 @@ export default function WatchDetail() {
   }, [id]);
 
   const w = data?.watch;
-  const nick = w ? nickOf(w.ref) : '';
+  const nick = w ? (w.nickname || nickOf(w.ref)) : '';
 
   return (
     <>

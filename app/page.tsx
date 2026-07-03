@@ -419,7 +419,7 @@ export default function Home() {
           brand: w.brand,
           name: w.name,
           ref: w.ref || '',
-          nickname: nickOf(w.ref),
+          nickname: w.nickname || nickOf(w.ref),   // curated CSV nickname wins, else built-in map
           price: Number(w.price) || 0,
           change: w.change == null ? null : Number(w.change),      // 24h window (nullable)
           change7d: w.change_7d == null ? null : Number(w.change_7d),
