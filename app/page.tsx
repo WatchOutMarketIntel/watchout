@@ -66,6 +66,9 @@ export default function Home() {
     };
     // Small nickname badge markup (empty string when the ref has no nickname).
     const nickBadge = (w: any) => w.nickname ? `<span class="nick">${w.nickname}</span>` : '';
+    // The sub-line metadata: Ref · Year · Material (only the parts we have).
+    const subMeta = (w: any) => [w.ref, w.year, w.material].filter(Boolean).join(' · ');
+    const subMetaBrand = (w: any) => [w.brand, w.ref, w.year, w.material].filter(Boolean).join(' · ');
     // Cards link INTO the watch's detail page; only fall back to the eBay search
     // for placeholder rows that have no id (API down).
     const watchUrl = (w: any) => w.id ? `/w/${w.id}` : ebayUrl(w);
@@ -145,6 +148,7 @@ export default function Home() {
           + `<div class="wcard-photo">${photoInner(w, 'wcard-img', 'wcard-fallback')}</div>`
           + `<div class="wcard-info"><div class="wcard-brand">${w.brand}</div>`
           + `<div class="wcard-name">${w.name}${nickBadge(w)}</div>`
+          + `<div class="wcard-meta">${subMeta(w)}</div>`
           + `<div class="wcard-row"><span class="wcard-price">${fmt(w.price)}</span>`
           + `<span class="${chgClass(w.change)}">${fmtChg(w.change)}</span></div></div></a>`;
         scene.appendChild(node);
@@ -242,7 +246,7 @@ export default function Home() {
       preview.innerHTML = oneEachBrand.slice(0, 5).map(w => `
         <a class="pv-row" href="${watchUrl(w)}">
           <div class="pv-photo">${photoInner(w, 'pv-img', 'pv-fb')}</div>
-          <div class="pv-id"><div class="pv-name">${w.name}${nickBadge(w)}</div><div class="pv-ref">${w.brand}${w.ref ? ' · ' + w.ref : ''}</div></div>
+          <div class="pv-id"><div class="pv-name">${w.name}${nickBadge(w)}</div><div class="pv-ref">${subMetaBrand(w)}</div></div>
           <div class="pv-price">${fmt(w.price)}</div>
           <div class="pv-chg ${chgClass(w.change)}">${fmtChg(w.change)}</div>
         </a>`).join('');
@@ -257,7 +261,7 @@ export default function Home() {
           <div class="spot-body">
             <div class="spot-brand">${w.brand}</div>
             <div class="spot-name">${w.name}${nickBadge(w)}</div>
-            <div class="spot-ref">${w.ref || '—'}</div>
+            <div class="spot-ref">${subMeta(w) || '—'}</div>
             <div class="spot-row"><span class="spot-price">${fmt(w.price)}</span><span class="${chgClass(w.change)}">${fmtChg(w.change)}</span></div>
           </div>
         </a>`).join('');
@@ -284,7 +288,7 @@ export default function Home() {
           <td>
             <a class="mkt-id" href="${watchUrl(w)}">
               <span class="mkt-photo">${photoInner(w, 'mkt-img', 'mkt-fb')}</span>
-              <span><span class="mkt-watch-name">${w.name}${nickBadge(w)}</span><span class="mkt-brand">${w.brand}${w.ref ? ' · ' + w.ref : ''}</span></span>
+              <span><span class="mkt-watch-name">${w.name}${nickBadge(w)}</span><span class="mkt-brand">${subMetaBrand(w)}</span></span>
             </a>
           </td>
           <td class="mkt-price">${fmt(w.price)}</td>
@@ -310,7 +314,7 @@ export default function Home() {
           ${myWatchlist.map(w => `
             <a class="wl-row" href="${watchUrl(w)}">
               <div class="wl-thumb">${photoInner(w, 'wl-img', 'wl-thumb-fb')}</div>
-              <div class="wl-info"><div class="wl-name">${w.name}${nickBadge(w)}</div><div class="wl-ref">${w.brand}${w.ref ? ' · ' + w.ref : ''}</div></div>
+              <div class="wl-info"><div class="wl-name">${w.name}${nickBadge(w)}</div><div class="wl-ref">${subMetaBrand(w)}</div></div>
               <div><div class="wl-price">${fmt(w.price)}</div><div class="wl-chg ${chgClass(w.change)}">${fmtChg(w.change)}</div></div>
             </a>`).join('')}
           <div class="wl-live"><span class="live-dot"></span>Updated hourly</div>
@@ -423,6 +427,8 @@ export default function Home() {
           spark: sparks[wkey(w.brand, w.name, w.ref)] || [],
           img: w.image_url || '',
           listing_url: w.listing_url || '',
+          year: w.year || '',
+          material: w.material || '',
         }));
         init(live.length ? live : PLACEHOLDER);
       })
@@ -534,7 +540,8 @@ export default function Home() {
         .wcard-fallback svg{width:34%;height:34%;color:var(--ink-3);}
         .wcard-info{padding:0.6rem 0.7rem 0.7rem;}
         .wcard-brand{font-size:0.56rem;font-weight:600;letter-spacing:0.18em;color:var(--red);text-transform:uppercase;margin-bottom:0.15rem;}
-        .wcard-name{font-family:var(--serif);font-size:0.95rem;font-weight:500;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:0.35rem;}
+        .wcard-name{font-family:var(--serif);font-size:0.95rem;font-weight:500;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:0.15rem;}
+        .wcard-meta{font-size:0.6rem;color:var(--ink-3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:0.3rem;}
         .wcard-row{display:flex;align-items:center;justify-content:space-between;font-size:0.78rem;}
         .wcard-price{font-weight:600;}
         .winder-dots{display:flex;gap:0.45rem;justify-content:center;margin-top:1.2rem;}

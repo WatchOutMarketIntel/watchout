@@ -118,7 +118,7 @@ export default function WatchDetail() {
               <div>
                 <div className="brand">{w.brand}</div>
                 <div className="name">{w.name}{nick && <span className="nick">{nick}</span>}</div>
-                <div className="ref">{w.ref ? `Ref. ${w.ref}` : 'Reference —'}</div>
+                <div className="ref">{[w.ref ? `Ref. ${w.ref}` : null, w.year, w.material].filter(Boolean).join('  ·  ') || 'Reference —'}</div>
                 <div className="price">{fmt(w.price)}</div>
                 <div className="chips">
                   <div className="chip"><b>24h</b><span className={chgCls(w.change)}>{fmtChg(w.change)}</span></div>
