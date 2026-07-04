@@ -41,7 +41,9 @@ export default function WatchDetail() {
 
   useEffect(() => {
     let cancelled = false;
-    fetch(`${API}/watch/${id}`)
+    const previewTier = new URLSearchParams(window.location.search).get('tier');
+    const tq = previewTier ? `?tier=${encodeURIComponent(previewTier)}` : '';
+    fetch(`${API}/watch/${id}${tq}`)
       .then(r => (r.ok ? r.json() : Promise.reject(r.status)))
       .then(d => { if (!cancelled) { setData(d); setState(d && d.watch ? 'ok' : 'error'); } })
       .catch(() => { if (!cancelled) setState('error'); });
@@ -78,6 +80,9 @@ export default function WatchDetail() {
         .chips{display:flex;gap:0.5rem;flex-wrap:wrap;margin:1rem 0 1.3rem;}
         .chip{border:1px solid var(--line);background:var(--surface);padding:0.4rem 0.7rem;font-size:0.8rem;}
         .chip b{display:block;font-size:0.6rem;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;color:var(--ink-3);margin-bottom:0.15rem;}
+        .chip.locked{border-style:dashed;}
+        .chip .lk{font-size:0.72rem;font-weight:600;color:var(--red);white-space:nowrap;}
+        .hist-cta{color:var(--red);font-weight:600;border-bottom:1px solid var(--red);}
         .stats{display:flex;gap:1.4rem;flex-wrap:wrap;font-size:0.85rem;color:var(--ink-2);margin-bottom:1.3rem;}
         .stats b{color:var(--ink);font-weight:600;}
         .cta{display:inline-block;font-size:0.86rem;font-weight:600;padding:0.7rem 1.4rem;background:var(--ink);color:var(--paper);}
@@ -122,8 +127,15 @@ export default function WatchDetail() {
                 <div className="price">{fmt(w.price)}</div>
                 <div className="chips">
                   <div className="chip"><b>24h</b><span className={chgCls(w.change)}>{fmtChg(w.change)}</span></div>
-                  <div className="chip"><b>7d</b><span className={chgCls(w.change_7d)}>{fmtChg(w.change_7d)}</span></div>
-                  <div className="chip"><b>30d</b><span className={chgCls(w.change_30d)}>{fmtChg(w.change_30d)}</span></div>
+                  {w.history_locked
+                    ? <>
+                        <div className="chip locked" title="Unlock with Personal"><b>7d</b><span className="lk">🔒 Personal</span></div>
+                        <div className="chip locked" title="Unlock with Personal"><b>30d</b><span className="lk">🔒 Personal</span></div>
+                      </>
+                    : <>
+                        <div className="chip"><b>7d</b><span className={chgCls(w.change_7d)}>{fmtChg(w.change_7d)}</span></div>
+                        <div className="chip"><b>30d</b><span className={chgCls(w.change_30d)}>{fmtChg(w.change_30d)}</span></div>
+                      </>}
                 </div>
                 <div className="stats">
                   <span>Low <b>{fmt(w.low)}</b></span>
@@ -136,7 +148,11 @@ export default function WatchDetail() {
 
             <div className="sec">
               <h2 className="sec-h">Price history</h2>
-              <p className="sec-sub">Average active-listing price, most recent snapshots.</p>
+              <p className="sec-sub">
+                {w.history_locked
+                  ? <>Showing the last 24 hours. <a className="hist-cta" href="/?tier=personal">Unlock 7-day, 30-day &amp; full history with Personal →</a></>
+                  : <>Average active-listing price, most recent snapshots.</>}
+              </p>
               <div dangerouslySetInnerHTML={{ __html: chart(data.history || []) }} />
             </div>
 

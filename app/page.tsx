@@ -16,6 +16,7 @@ const SVG: Record<string, string> = {
   watch: _svg('<circle cx="12" cy="12" r="5.5"/><path d="M12 9.5V12l1.6 1.2"/><path d="M8.6 6.6 8 3.2h8l-.6 3.4"/><path d="M8.6 17.4 8 20.8h8l-.6-3.4"/>'),
   mail: _svg('<rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/>'),
   phone: _svg('<rect x="7" y="2" width="10" height="20" rx="2"/><path d="M11 18h2"/>'),
+  lock: _svg('<rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>'),
 };
 
 // ── SEASONAL "FEATURED WATCH" CAPSULE (config-driven; swap quarterly) ──
@@ -99,7 +100,12 @@ export default function Home() {
     };
 
     // Everything below renders from whatever watch list it's given (live or placeholder).
-    const init = (WATCHES: any[]) => {
+    const init = (WATCHES: any[], meta: any = {}) => {
+    const ent = meta.ent || { market_cap: null, alerts: true, watchlists: true, ads: false, history_days: null };
+    const totalRefs = meta.total || WATCHES.length;
+    // A reusable "unlock" CTA that opens the join/upgrade modal.
+    const lockCta = (label: string, planName = 'Personal') =>
+      `<button class="lock-cta" onclick="openModal()">Unlock with ${planName}</button>`;
     // ── TAB SYSTEM ──
     const switchTab = (name: string) => {
       document.querySelectorAll('.wo-page').forEach(p => p.classList.remove('active'));
@@ -296,8 +302,51 @@ export default function Home() {
           <td class="mkt-vol">${(w as any).count != null ? (w as any).count : '—'} listings</td>
           <td><button class="alert-btn" onclick="openModal()">+ Alert</button></td>
         </tr>`).join('');
+      // Locked-rows teaser: when the free tier capped the payload, show how many
+      // more references are behind the paywall (only on the unfiltered view).
+      const locked = totalRefs - WATCHES.length;
+      if (ent.market_cap && filter === 'all' && locked > 0) {
+        tbody.innerHTML += `
+          <tr class="mkt-lock-row"><td colspan="6">
+            <div class="mkt-lock">
+              <div class="mkt-lock-t"><span class="lock-ico">${SVG.lock}</span>${locked.toLocaleString()} more references locked</div>
+              <div class="mkt-lock-d">Free shows the top ${WATCHES.length} by listing volume. See the full market with Personal.</div>
+              ${lockCta('market', 'Personal')}
+            </div>
+          </td></tr>`;
+      }
     };
     buildMarket('all');
+    // ── ADS SLOT (free/anonymous only; house upgrade placeholder — no 3rd-party, no PII) ──
+    const adSlot = document.getElementById('adSlot');
+    if (adSlot) {
+      if (ent.ads) {
+        adSlot.innerHTML = `<div class="ad-inner"><span class="ad-eye">Advertisement</span>
+          <div class="ad-body"><div class="ad-h">Go ad-free with Personal</div>
+          <p class="ad-d">Full market, 7-day &amp; 30-day price history, and instant alerts — without ads.</p></div>
+          <button class="ad-cta" onclick="openModal()">Upgrade</button></div>`;
+        adSlot.style.display = 'block';
+      } else {
+        adSlot.style.display = 'none';
+      }
+    }
+    // ── ALERTS LOCK (free tier) ──
+    const alertsLock = document.getElementById('alertsLock');
+    const alertsBox = document.getElementById('alertsBox');
+    if (alertsLock && alertsBox) {
+      if (!ent.alerts) {
+        alertsBox.style.display = 'none';
+        alertsLock.style.display = 'flex';
+        alertsLock.innerHTML = `<div class="feature-lock">
+          <span class="lock-ico-lg">${SVG.lock}</span>
+          <div class="feature-lock-t">Price alerts are a Personal feature</div>
+          <p class="feature-lock-d">Set a target price or % move and we'll email you the moment it hits. Included with Personal and above.</p>
+          ${lockCta('alerts', 'Personal')}</div>`;
+      } else {
+        alertsLock.style.display = 'none';
+        alertsBox.style.display = '';
+      }
+    }
     (window as any).filterMkt = (btn: HTMLElement, brand: string) => {
       document.querySelectorAll('.mkt-filter').forEach(b => b.classList.remove('on'));
       btn.classList.add('on');
@@ -400,15 +449,24 @@ export default function Home() {
       entries.forEach(e => { if (e.isIntersecting) e.target.classList.add('in'); });
     }, { threshold: 0.08 });
     document.querySelectorAll('.fade').forEach(el => obs.observe(el));
+
+    // Deep-link to a tab via ?view=market|watchlists|alerts|account (also lets the
+    // gate demo screenshot a specific tab). Preserves any ?tier= preview param.
+    const view = new URLSearchParams(window.location.search).get('view');
+    if (view && document.getElementById('page-' + view)) switchTab(view);
     }; // end init
 
     // ── LOAD LIVE DATA ──
     const API = (process.env.NEXT_PUBLIC_API_URL || 'https://watchout-api-production.up.railway.app').replace(/\/+$/, '');
     let cancelled = false;
     const wkey = (b: string, n: string, r: string) => `${b}|${n}|${r || ''}`;
+    // Optional ?tier= preview override (only honored by the API when TIER_PREVIEW
+    // is on — for pre-auth gate demos). Once real auth is wired this is unused.
+    const previewTier = new URLSearchParams(window.location.search).get('tier');
+    const tq = (sep: string) => (previewTier ? `${sep}tier=${encodeURIComponent(previewTier)}` : '');
     Promise.all([
-      fetch(`${API}/market`).then(r => (r.ok ? r.json() : Promise.reject(r.status))),
-      fetch(`${API}/market/history?points=24`).then(r => (r.ok ? r.json() : { history: [] })).catch(() => ({ history: [] })),
+      fetch(`${API}/market${tq('?')}`).then(r => (r.ok ? r.json() : Promise.reject(r.status))),
+      fetch(`${API}/market/history?points=24${tq('&')}`).then(r => (r.ok ? r.json() : { history: [] })).catch(() => ({ history: [] })),
     ])
       .then(([d, h]: any[]) => {
         if (cancelled) return;
@@ -430,7 +488,11 @@ export default function Home() {
           year: w.year || '',
           material: w.material || '',
         }));
-        init(live.length ? live : PLACEHOLDER);
+        // Entitlements drive the locked states + ads slot; default to "unlocked"
+        // so the placeholder path (API down) still shows everything.
+        const ent = d.entitlements || { market_cap: null, alerts: true, watchlists: true, ads: false, history_days: null };
+        const meta = { ent, total: d.total || live.length, tier: d.tier || 'anonymous' };
+        init(live.length ? live : PLACEHOLDER, meta);
       })
       .catch(() => { if (!cancelled) init(PLACEHOLDER); });
 
@@ -478,6 +540,31 @@ export default function Home() {
         a{color:inherit;text-decoration:none;}
         .num{font-variant-numeric:tabular-nums;}
         .up{color:var(--gain);}.down{color:var(--red);}.flat{color:var(--ink-3);}
+
+        /* ── MONETIZATION: locked states, upgrade CTAs, ad slot ── */
+        .lock-cta{display:inline-block;font-size:0.78rem;font-weight:600;letter-spacing:0.01em;padding:0.55rem 1.1rem;background:var(--ink);color:var(--paper);border:none;cursor:pointer;transition:background 0.15s;}
+        .lock-cta:hover{background:#000;}
+        .lock-ico svg{width:14px;height:14px;vertical-align:-2px;margin-right:0.4rem;color:var(--red);}
+        .lock-ico-lg svg{width:30px;height:30px;color:var(--red);}
+        /* Locked market rows teaser */
+        .mkt-lock-row td{padding:0 !important;background:var(--surface);}
+        .mkt-lock{display:flex;align-items:center;gap:1rem;flex-wrap:wrap;padding:1.1rem 1rem;border-top:2px solid var(--red);}
+        .mkt-lock-t{font-family:var(--serif);font-size:1.05rem;font-weight:500;color:var(--ink);}
+        .mkt-lock-d{font-size:0.82rem;color:var(--ink-3);flex:1;min-width:180px;}
+        /* Generic feature lock panel (alerts, etc.) */
+        .feature-lock{display:flex;flex-direction:column;align-items:flex-start;gap:0.6rem;max-width:600px;background:var(--surface);border:1px solid var(--line);border-top:2px solid var(--red);padding:clamp(1.4rem,4vw,2.2rem);}
+        .feature-lock-t{font-family:var(--serif);font-size:1.3rem;font-weight:500;color:var(--ink);}
+        .feature-lock-d{font-size:0.9rem;color:var(--ink-2);line-height:1.6;}
+        .alerts-lock{margin-bottom:2rem;}
+        /* Ad slot — free/anon only; house upgrade, no third-party */
+        .ad-slot{padding:0 clamp(1rem,4vw,3rem);}
+        .ad-inner{display:flex;align-items:center;gap:1rem;flex-wrap:wrap;max-width:1180px;margin:1.4rem auto 0;padding:0.9rem 1.1rem;background:var(--surface);border:1px dashed var(--ink-3);}
+        .ad-eye{font-size:0.56rem;font-weight:600;letter-spacing:0.18em;text-transform:uppercase;color:var(--ink-3);}
+        .ad-body{flex:1;min-width:180px;}
+        .ad-h{font-family:var(--serif);font-size:1rem;font-weight:500;color:var(--ink);}
+        .ad-d{font-size:0.8rem;color:var(--ink-3);margin-top:0.1rem;}
+        .ad-cta{font-size:0.78rem;font-weight:600;padding:0.5rem 1.1rem;background:var(--ink);color:var(--paper);border:none;cursor:pointer;}
+        .ad-cta:hover{background:#000;}
         /* Nickname badge — small, quiet, sits beside the model name */
         .nick{display:inline-block;margin-left:0.5rem;font-family:var(--sans);font-size:0.6rem;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;color:var(--red);background:rgba(168,54,43,0.08);border:1px solid rgba(168,54,43,0.25);border-radius:999px;padding:0.08rem 0.42rem;vertical-align:middle;white-space:nowrap;}
 
@@ -853,6 +940,9 @@ export default function Home() {
           <div className="ticker-track" id="homeTicker"></div>
         </div>
 
+        {/* Ad slot — free/anonymous only (house upgrade placeholder; populated in init) */}
+        <div className="ad-slot" id="adSlot" style={{ display: 'none' }}></div>
+
         {/* Featured capsule (config-driven, quarterly) */}
         <section className="band featured fade">
           <div className="feat-grid">
@@ -967,6 +1057,9 @@ export default function Home() {
       <div className="wo-page" id="page-alerts">
         <div className="page-wrap">
           <div className="page-head"><p className="kicker">Price alerts</p><h2 className="page-h">Never miss the right price</h2><div className="rule"></div></div>
+          {/* Locked state for free tier (populated in init); hidden otherwise */}
+          <div className="alerts-lock" id="alertsLock" style={{ display: 'none' }}></div>
+          <div id="alertsBox">
           <div className="alert-form-box">
             <div className="afb-title">Set a new alert</div>
             <div className="afb-grid">
@@ -984,6 +1077,7 @@ export default function Home() {
           </div>
           <h3 className="alerts-h">Active alerts</h3>
           <div className="alerts-list" id="alertsList"></div>
+          </div>{/* end #alertsBox */}
         </div>
       </div>
 
