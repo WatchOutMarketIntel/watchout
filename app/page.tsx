@@ -112,7 +112,14 @@ export default function Home() {
       document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
       document.getElementById('page-' + name)?.classList.add('active');
       document.getElementById('tab-' + name)?.classList.add('active');
+      // Market always opens fresh: reset the brand filter to "All" and rebuild,
+      // so you never land on a prior scroll/filter state.
+      if (name === 'market') {
+        document.querySelectorAll('.mkt-filter').forEach((b, i) => b.classList.toggle('on', i === 0));
+        buildMarket('all');
+      }
       window.scrollTo(0, 0);
+      document.documentElement.scrollTop = 0;   // belt-and-suspenders for the reset-to-top
     };
     (window as any).switchTab = switchTab;
 
@@ -136,93 +143,22 @@ export default function Home() {
     // it becomes a true mover ranking once snapshots accumulate.
     const mostActive = oneEachBrand.slice().sort((a, b) => Math.abs(b.change) - Math.abs(a.change)).slice(0, 12);
 
-    // ── TODAY'S MOVERS — auto-rotating turnstile ──
-    const scene = document.getElementById('winderScene');
-    const winderWatches = oneEachBrand.slice(0, 6);
-    const N = Math.max(1, winderWatches.length);
-    let winderAngle = 0;
-    let winderPaused = false;
-    let frontIdx = -1;
-
-    if (scene) {
-      winderWatches.forEach((w, i) => {
-        const node = document.createElement('div');
-        node.className = 'wcard';
-        node.id = `wc${i}`;
-        node.innerHTML =
-          `<a class="wcard-inner" href="${watchUrl(w)}" aria-label="${w.brand} ${w.name} details">`
-          + `<div class="wcard-photo">${photoInner(w, 'wcard-img', 'wcard-fallback')}</div>`
-          + `<div class="wcard-info"><div class="wcard-brand">${w.brand}</div>`
-          + `<div class="wcard-name">${w.name}${nickBadge(w)}</div>`
-          + `<div class="wcard-meta">${subMeta(w)}</div>`
-          + `<div class="wcard-row"><span class="wcard-price">${fmt(w.price)}</span>`
-          + `<span class="${chgClass(w.change)}">${fmtChg(w.change)}</span></div></div></a>`;
-        scene.appendChild(node);
-      });
-
-      // rotation dots
-      const dots = document.getElementById('winderDots');
-      if (dots) {
-        winderWatches.forEach((_w, i) => {
-          const dot = document.createElement('button');
-          dot.className = 'wdot';
-          dot.setAttribute('aria-label', `Show watch ${i + 1}`);
-          dot.addEventListener('click', () => { winderAngle = -(2 * Math.PI / N) * i; });
-          dots.appendChild(dot);
-        });
-      }
-
-      const layoutWinder = () => {
-        const wrap = document.querySelector('.winder-wrap') as HTMLElement;
-        if (!wrap) return;
-        const W = wrap.offsetWidth, H = wrap.offsetHeight;
-        // rY = 0 → cards travel on a single horizontal line (no vertical/diagonal
-        // drift). The depth/scale carousel still reads as motion, purely sideways.
-        const rX = W * 0.42, rY = 0;
-        const cardW = Math.min(150, W * 0.26);
-
-        const cards = winderWatches.map((w, i) => {
-          const theta = (2 * Math.PI / N) * i + winderAngle;
-          const sinT = Math.sin(theta), cosT = Math.cos(theta);
-          const depth = (cosT + 1) / 2;
-          return { i, x: sinT * rX, y: sinT * rY, depth };
-        });
-        cards.sort((a, b) => a.depth - b.depth);
-
-        cards.forEach((c, renderOrder) => {
-          const node = document.getElementById(`wc${c.i}`);
-          if (!node) return;
-          const isFront = c.depth > 0.82;
-          const isBack = c.depth <= 0.40;
-          if (isBack) {
-            node.style.cssText = `position:absolute;opacity:0;pointer-events:none;z-index:${renderOrder};width:${cardW}px;`;
-            return;
-          }
-          const scale = isFront ? 1 : 0.62;
-          const opacity = isFront ? 1 : 0.4;
-          const left = W / 2 + c.x - (cardW * scale) / 2;
-          const top = H / 2 + c.y - cardW * 0.7 * scale;
-          node.style.cssText = `position:absolute;left:${left}px;top:${top}px;width:${cardW}px;transform:scale(${scale});transform-origin:top center;opacity:${opacity};z-index:${renderOrder};`;
-          node.classList.toggle('front', isFront);
-          if (isFront && c.i !== frontIdx) {
-            frontIdx = c.i;
-            document.querySelectorAll('.wdot').forEach((d, di) => d.classList.toggle('on', di === c.i));
-          }
-        });
-      };
-
-      const animateWinder = () => {
-        if (!winderPaused) winderAngle += 0.0035;
-        layoutWinder();
-        requestAnimationFrame(animateWinder);
-      };
-      requestAnimationFrame(animateWinder);
-      window.addEventListener('resize', layoutWinder);
-      const winderWrap = document.querySelector('.winder-wrap');
-      if (winderWrap) {
-        winderWrap.addEventListener('mouseenter', () => winderPaused = true);
-        winderWrap.addEventListener('mouseleave', () => winderPaused = false);
-      }
+    // ── TODAY'S MOVERS — seamless horizontal marquee ──
+    // Duplicate the set and animate translateX 0 → -50%, so the strip loops with
+    // no seam. Purely horizontal, never stops (CSS animation); pauses on hover.
+    const moversTrack = document.getElementById('moversTrack');
+    if (moversTrack) {
+      const movers = oneEachBrand.slice(0, 10);
+      const card = (w: any) =>
+        `<a class="mv-card" href="${watchUrl(w)}" aria-label="${w.brand} ${w.name} details">`
+        + `<div class="mv-photo">${photoInner(w, 'mv-img', 'mv-fb')}</div>`
+        + `<div class="mv-info"><div class="mv-brand">${w.brand}</div>`
+        + `<div class="mv-name">${w.name}${nickBadge(w)}</div>`
+        + `<div class="mv-row"><span class="mv-price">${fmt(w.price)}</span>`
+        + `<span class="${chgClass(w.change)}">${fmtChg(w.change)}</span></div></div></a>`;
+      // Duplicate the set — the two halves are identical, so translating by -50%
+      // lands exactly where it started → a seamless infinite loop.
+      moversTrack.innerHTML = movers.length ? [...movers, ...movers].map(card).join('') : '';
     }
 
     // ── MOST-ACTIVE TICKER ──
@@ -266,8 +202,8 @@ export default function Home() {
           <div class="spot-photo">${photoInner(w, 'spot-img', 'spot-fb')}</div>
           <div class="spot-body">
             <div class="spot-brand">${w.brand}</div>
-            <div class="spot-name">${w.name}${nickBadge(w)}</div>
-            <div class="spot-ref">${subMeta(w) || '—'}</div>
+            <div class="spot-name">${w.name}</div>
+            <div class="spot-ref">${w.nickname || w.ref || '—'}</div>
             <div class="spot-row"><span class="spot-price">${fmt(w.price)}</span><span class="${chgClass(w.change)}">${fmtChg(w.change)}</span></div>
           </div>
         </a>`).join('');
@@ -615,25 +551,25 @@ export default function Home() {
         .idx-spark .spark{width:120px;height:26px;}
         .idx-meta{font-size:0.72rem;color:var(--ink-3);margin-left:auto;}
 
-        /* MOVERS TURNSTILE */
-        .winder-wrap{width:min(620px,94vw);height:min(300px,52vw);position:relative;margin:0.5rem auto 0;}
-        .winder-scene{width:100%;height:100%;position:relative;}
-        .wcard{position:absolute;}
-        .wcard-inner{display:block;background:var(--surface);border:1px solid var(--line);overflow:hidden;}
-        .wcard.front .wcard-inner{border-color:var(--ink);}
-        .wcard-photo{width:100%;aspect-ratio:1;background:#fff;}
-        .wcard-img{width:100%;height:100%;object-fit:cover;display:block;}
-        .wcard-fallback{width:100%;aspect-ratio:1;background:#EFE7D5;display:flex;align-items:center;justify-content:center;}
-        .wcard-fallback svg{width:34%;height:34%;color:var(--ink-3);}
-        .wcard-info{padding:0.6rem 0.7rem 0.7rem;}
-        .wcard-brand{font-size:0.56rem;font-weight:600;letter-spacing:0.18em;color:var(--red);text-transform:uppercase;margin-bottom:0.15rem;}
-        .wcard-name{font-family:var(--serif);font-size:0.95rem;font-weight:500;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:0.15rem;}
-        .wcard-meta{font-size:0.6rem;color:var(--ink-3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:0.3rem;}
-        .wcard-row{display:flex;align-items:center;justify-content:space-between;font-size:0.78rem;}
-        .wcard-price{font-weight:600;}
-        .winder-dots{display:flex;gap:0.45rem;justify-content:center;margin-top:1.2rem;}
-        .wdot{width:7px;height:7px;border-radius:50%;border:none;background:var(--line);cursor:pointer;padding:0;transition:background 0.15s;}
-        .wdot.on{background:var(--red);}
+        /* MOVERS — seamless horizontal marquee */
+        .movers-strip{overflow:hidden;position:relative;width:100%;
+          -webkit-mask-image:linear-gradient(90deg,transparent,#000 5%,#000 95%,transparent);
+          mask-image:linear-gradient(90deg,transparent,#000 5%,#000 95%,transparent);}
+        .mv-track{display:flex;gap:1rem;width:max-content;animation:mv-scroll 55s linear infinite;will-change:transform;}
+        .movers-strip:hover .mv-track{animation-play-state:paused;}
+        @keyframes mv-scroll{from{transform:translateX(0)}to{transform:translateX(-50%)}}
+        .mv-card{display:block;flex:0 0 auto;width:172px;background:var(--surface);border:1px solid var(--line);overflow:hidden;transition:border-color 0.15s;}
+        .mv-card:hover{border-color:var(--ink);}
+        .mv-photo{width:100%;aspect-ratio:1;background:#fff;}
+        .mv-img{width:100%;height:100%;object-fit:cover;display:block;}
+        .mv-fb{width:100%;aspect-ratio:1;background:#EFE7D5;display:flex;align-items:center;justify-content:center;}
+        .mv-fb svg{width:34%;height:34%;color:var(--ink-3);}
+        .mv-info{padding:0.6rem 0.7rem 0.7rem;}
+        .mv-brand{font-size:0.56rem;font-weight:600;letter-spacing:0.18em;color:var(--red);text-transform:uppercase;margin-bottom:0.15rem;}
+        .mv-name{font-family:var(--serif);font-size:0.95rem;font-weight:500;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:0.3rem;}
+        .mv-row{display:flex;align-items:center;justify-content:space-between;font-size:0.78rem;}
+        .mv-price{font-weight:600;}
+        @media(prefers-reduced-motion:reduce){.mv-track{animation:none;}}
 
         /* MARKET PREVIEW (home) */
         .pv-list{max-width:760px;}
@@ -930,8 +866,7 @@ export default function Home() {
             <div><p className="kicker">Today&rsquo;s movers</p><h2 className="band-h">Watches on the move</h2></div>
             <span className="band-cap">Updates daily</span>
           </div>
-          <div className="winder-wrap"><div className="winder-scene" id="winderScene"></div></div>
-          <div className="winder-dots" id="winderDots"></div>
+          <div className="movers-strip"><div className="mv-track" id="moversTrack"></div></div>
         </section>
 
         {/* Most-active ticker */}
