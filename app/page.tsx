@@ -10,6 +10,7 @@ const SVG: Record<string, string> = {
   home: _svg('<path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M9 22V12h6v10"/>'),
   market: _svg('<path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/>'),
   pro: _svg('<rect x="3" y="4" width="18" height="16" rx="1.5"/><path d="M3 9h18"/><path d="M8 4v16"/>'),
+  collection: _svg('<path d="m12 2 9 5-9 5-9-5 9-5Z"/><path d="m3 12 9 5 9-5"/><path d="m3 17 9 5 9-5"/>'),
   watchlists: _svg('<path d="M8 6h13M8 12h13M8 18h13"/><path d="M3 6h.01M3 12h.01M3 18h.01"/>'),
   alerts: _svg('<path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/>'),
   account: _svg('<path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>'),
@@ -92,8 +93,11 @@ export default function Home() {
       ? `<img class="${imgCls}" src="${w.img}" alt="${w.brand} ${w.name}" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"/><span class="${fbCls}" style="display:none">${SVG.watch}</span>`
       : `<span class="${fbCls}" style="display:flex">${SVG.watch}</span>`;
 
-    // Tiny inline sparkline (oldest→newest). Gain green / loss red; dash when <2 pts.
-    const sparkline = (prices?: number[]) => {
+    // Tiny inline sparkline (oldest→newest). Colour matches the adjacent trend badge
+    // when a signOverride (the % change shown by the badge) is passed, so a green
+    // spark can never sit beside a red badge; otherwise it colours by its own
+    // first→last slope. Dash when <2 pts.
+    const sparkline = (prices?: number[], signOverride?: number | null) => {
       if (!prices || prices.length < 2) return '<span class="spark-empty">—</span>';
       const W = 88, H = 28, pad = 3;
       const min = Math.min(...prices), max = Math.max(...prices);
@@ -106,7 +110,8 @@ export default function Home() {
       };
       const pts = prices.map((p, i) => xy(p, i).map(v => v.toFixed(1)).join(',')).join(' ');
       const [lx, ly] = xy(prices[n - 1], n - 1);
-      const color = prices[n - 1] >= prices[0] ? '#3E7D5A' : '#A8362B';
+      const up = (signOverride != null) ? signOverride >= 0 : prices[n - 1] >= prices[0];
+      const color = up ? '#3E7D5A' : '#A8362B';
       return `<svg class="spark" viewBox="0 0 ${W} ${H}" aria-hidden="true">`
         + `<polyline points="${pts}" fill="none" stroke="${color}" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>`
         + `<circle cx="${lx.toFixed(1)}" cy="${ly.toFixed(1)}" r="1.7" fill="${color}"/></svg>`;
@@ -132,6 +137,7 @@ export default function Home() {
         buildMarket('all');
       }
       if (name === 'pro') buildPro();   // (re)render the terminal with current filters/sort
+      if (name === 'collection') buildCollection();
       window.scrollTo(0, 0);
       document.documentElement.scrollTop = 0;   // belt-and-suspenders for the reset-to-top
     };
@@ -256,7 +262,7 @@ export default function Home() {
             </a>
           </td>
           <td class="mkt-price">${fmt(w.price)}</td>
-          <td title="${trendTip('7 days')}"><div class="mkt-trend">${sparkline((w as any).spark)}<span class="${c7 == null ? 'badge-flat' : (c7 >= 0 ? 'badge-up' : 'badge-dn')}">${fmtChg(c7)}</span></div></td>
+          <td title="${trendTip('7 days')}"><div class="mkt-trend">${sparkline((w as any).spark, c7)}<span class="${c7 == null ? 'badge-flat' : (c7 >= 0 ? 'badge-up' : 'badge-dn')}">${fmtChg(c7)}</span></div></td>
           <td class="mkt-vol">${(w as any).count != null ? (w as any).count : '—'} listings</td>
           <td><button class="alert-btn" onclick="openModal()">+ Alert</button></td>
         </tr>${deal ? `
@@ -459,6 +465,165 @@ export default function Home() {
     fillSelect('proBrandSel', proBrands, 'All brands');
     fillSelect('proMatSel', proMaterials, 'All materials');
     buildPro();
+
+    // ── MY COLLECTION (localStorage; no auth, no backend, no PII) ──
+    // Track owned watches + optional purchase info; value them off the LIVE market
+    // (average asking price — labelled as an estimate). Storage schema is
+    // { v:1, items:[{watchId, ref, addedAt, purchasePrice, purchaseYear, note}] }
+    // so it can migrate to a DB `collections` table verbatim once auth lands.
+    const COLL_KEY = 'wo_collection';
+    const loadColl = () => {
+      try { const j = JSON.parse(localStorage.getItem(COLL_KEY) || ''); if (j && Array.isArray(j.items)) return j; } catch { /* fresh */ }
+      return { v: 1, items: [] as any[] };
+    };
+    const saveColl = () => { try { localStorage.setItem(COLL_KEY, JSON.stringify(coll)); } catch { /* private mode */ } };
+    let coll: any = loadColl();
+    let collSel: any = null;              // watch chosen from search, pending add
+    let collEditIdx: number | null = null; // index of the item being edited
+    // Resolve an item to its live market watch (by id, else by ref).
+    const collWatch = (it: any) => WATCHES.find((w: any) => w.id === it.watchId)
+      || WATCHES.find((w: any) => w.ref && it.ref && w.ref === it.ref) || null;
+    const money = (n: number | null | undefined) =>
+      n == null ? '—' : (n < 0 ? '-$' : '$') + Math.abs(Math.round(n)).toLocaleString();
+    const parseNum = (s: string | undefined) => {
+      if (!s) return null; const n = Number((s + '').replace(/[^0-9.]/g, ''));
+      return isFinite(n) && n > 0 ? n : null;
+    };
+    const downloadBlob = (data: string, filename: string, type: string) => {
+      const blob = new Blob([data], { type });
+      const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = filename;
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+    };
+
+    const renderCollForm = () => {
+      const f = document.getElementById('collForm');
+      if (!f) return;
+      const editing = collEditIdx != null;
+      const it = editing ? coll.items[collEditIdx as number] : null;
+      const w = editing ? collWatch(it) : collSel;
+      if (!editing && !collSel) { f.style.display = 'none'; f.innerHTML = ''; return; }
+      const label = w ? `${w.brand} ${w.name}${w.ref ? ` · ${w.ref}` : ''}` : (it ? it.ref : '');
+      const pp = it && it.purchasePrice != null ? '$' + Number(it.purchasePrice).toLocaleString() : '';
+      const py = it && it.purchaseYear != null ? it.purchaseYear : '';
+      const nt = it && it.note ? (it.note + '').replace(/"/g, '&quot;') : '';
+      f.style.display = 'block';
+      f.innerHTML = `<div class="coll-form-h">${editing ? 'Edit' : 'Add'} &nbsp;<b>${label}</b></div>
+        <div class="coll-form-grid">
+          <label>Purchase price<input id="cf-price" type="text" inputmode="numeric" placeholder="$ (optional)" value="${pp}"></label>
+          <label>Purchase year<input id="cf-year" type="text" inputmode="numeric" placeholder="e.g. 2023" value="${py}"></label>
+          <label>Note<input id="cf-note" type="text" placeholder="(optional)" value="${nt}"></label>
+        </div>
+        <div class="coll-form-actions"><button class="coll-save" onclick="collSave()">${editing ? 'Save changes' : 'Add to collection'}</button><button class="coll-cancel" onclick="collCancel()">Cancel</button></div>`;
+    };
+
+    const buildCollection = () => {
+      const host = document.getElementById('collBody');
+      if (!host) return;
+      let total = 0, pnl = 0, basis = 0, hasPnl = false;
+      coll.items.forEach((it: any) => {
+        const w = collWatch(it);
+        if (w && w.price != null) total += w.price;
+        if (it.purchasePrice != null && w && w.price != null) { pnl += (w.price - it.purchasePrice); basis += it.purchasePrice; hasPnl = true; }
+      });
+      const pct = hasPnl && basis > 0 ? (pnl / basis * 100) : null;
+      const setTxt = (id: string, v: string) => { const e = document.getElementById(id); if (e) e.textContent = v; };
+      setTxt('collCount', String(coll.items.length));
+      setTxt('collValue', total ? fmt(total) : '—');
+      const pnlEl = document.getElementById('collPnl');
+      if (pnlEl) pnlEl.innerHTML = hasPnl
+        ? `<span class="${pnl >= 0 ? 'up' : 'down'}">${pnl >= 0 ? '▲ +' : '▼ '}${money(Math.abs(pnl))} (${pnl >= 0 ? '+' : '−'}${Math.abs(pct as number).toFixed(1)}%)</span>`
+        : '<span class="flat">—</span>';
+      const tb = document.getElementById('collToolbar'); if (tb) tb.style.display = coll.items.length ? 'flex' : 'none';
+      if (!coll.items.length) {
+        host.innerHTML = `<div class="coll-empty"><div class="coll-empty-ic">${SVG.collection}</div><div class="coll-empty-t">Add the watches you own — WatchOut tracks their market value live.</div><p class="coll-empty-d">Search a reference above to add your first watch. Values are estimated from current market listings.</p></div>`;
+        return;
+      }
+      host.innerHTML = `<div style="overflow-x:auto"><table class="coll-table"><thead><tr><th>Watch</th><th class="th-num">Market value</th><th class="th-num" title="${trendTip('7 days')}">7d Δ</th><th class="th-num">Paid</th><th class="th-num">Unrealized P&amp;L</th><th></th></tr></thead><tbody>`
+        + coll.items.map((it: any, i: number) => {
+          const w = collWatch(it);
+          const price = w ? w.price : null;
+          const c7 = w ? w.change7d : null;
+          const nick = w ? (w.nickname || '') : '';
+          const name = w ? `${w.brand} ${w.name}` : it.ref;
+          const fw = { img: w ? w.img : '', brand: w ? w.brand : '', name: w ? w.name : it.ref };
+          const ip = (it.purchasePrice != null && price != null) ? (price - it.purchasePrice) : null;
+          const ipct = (ip != null && it.purchasePrice > 0) ? (ip / it.purchasePrice * 100) : null;
+          return `<tr>
+            <td><div class="coll-id"><span class="coll-thumb">${photoInner(fw, 'coll-img', 'coll-fb')}</span><span><span class="coll-name">${name}${nick ? `<span class="nick">${nick}</span>` : ''}</span><span class="coll-sub">${it.ref || '—'}${it.purchaseYear ? ` · bought ${it.purchaseYear}` : ''}${it.note ? ` · ${it.note}` : ''}</span></span></div></td>
+            <td class="p-num coll-val">${price != null ? fmt(price) : '—'}</td>
+            <td class="p-num ${chgClass(c7)}" title="${trendTip('7 days')}">${fmtChgShort(c7)}</td>
+            <td class="p-num">${it.purchasePrice != null ? fmt(it.purchasePrice) : '—'}</td>
+            <td class="p-num ${ip == null ? 'flat' : (ip >= 0 ? 'up' : 'down')}">${ip == null ? '—' : `${ip >= 0 ? '▲ +' : '▼ '}${money(Math.abs(ip))}${ipct != null ? ` (${ip >= 0 ? '+' : '−'}${Math.abs(ipct).toFixed(1)}%)` : ''}`}</td>
+            <td class="coll-actions"><button class="coll-edit" onclick="collEdit(${i})">Edit</button><button class="coll-rm" onclick="collRemove(${i})" aria-label="Remove">✕</button></td>
+          </tr>`;
+        }).join('') + `</tbody></table></div>`;
+    };
+
+    (window as any).collSearch = (v: string) => {
+      const box = document.getElementById('collSearchResults');
+      if (!box) return;
+      const q = v.trim().toLowerCase();
+      if (!q) { box.innerHTML = ''; box.style.display = 'none'; return; }
+      const matches = WATCHES.filter((w: any) => [w.brand, w.name, w.ref, w.nickname].filter(Boolean).join(' ').toLowerCase().includes(q)).slice(0, 8);
+      box.style.display = matches.length ? 'block' : 'none';
+      box.innerHTML = matches.map((w: any) => `<button class="coll-opt" onclick="collPick(${w.id})"><span class="coll-opt-n">${w.brand} ${w.name}${w.nickname ? ` <span class="nick">${w.nickname}</span>` : ''}</span><span class="coll-opt-ref">${w.ref} · ${fmt(w.price)}</span></button>`).join('');
+    };
+    (window as any).collPick = (id: number) => {
+      collSel = WATCHES.find((w: any) => w.id === id) || null; collEditIdx = null;
+      const box = document.getElementById('collSearchResults'); if (box) { box.innerHTML = ''; box.style.display = 'none'; }
+      const si = document.getElementById('collSearchInput') as HTMLInputElement; if (si) si.value = collSel ? `${collSel.brand} ${collSel.name} · ${collSel.ref}` : '';
+      renderCollForm();
+    };
+    (window as any).collSave = () => {
+      const price = parseNum((document.getElementById('cf-price') as HTMLInputElement)?.value);
+      const yr = parseNum((document.getElementById('cf-year') as HTMLInputElement)?.value);
+      const note = ((document.getElementById('cf-note') as HTMLInputElement)?.value || '').trim().slice(0, 120);
+      if (collEditIdx != null) {
+        const it = coll.items[collEditIdx]; it.purchasePrice = price; it.purchaseYear = yr ? Math.round(yr) : null; it.note = note;
+      } else if (collSel) {
+        coll.items.push({ watchId: collSel.id, ref: collSel.ref, addedAt: new Date().toISOString().slice(0, 10), purchasePrice: price, purchaseYear: yr ? Math.round(yr) : null, note });
+      }
+      saveColl(); collSel = null; collEditIdx = null;
+      const si = document.getElementById('collSearchInput') as HTMLInputElement; if (si) si.value = '';
+      renderCollForm(); buildCollection();
+    };
+    (window as any).collCancel = () => {
+      collSel = null; collEditIdx = null;
+      const si = document.getElementById('collSearchInput') as HTMLInputElement; if (si) si.value = '';
+      renderCollForm();
+    };
+    (window as any).collEdit = (idx: number) => { collEditIdx = idx; collSel = null; renderCollForm(); document.getElementById('collForm')?.scrollIntoView({ block: 'nearest' }); };
+    (window as any).collRemove = (idx: number) => { coll.items.splice(idx, 1); saveColl(); if (collEditIdx === idx) { collEditIdx = null; renderCollForm(); } buildCollection(); };
+    (window as any).exportCollCSV = () => {
+      const head = ['Ref', 'Brand', 'Model', 'Nickname', 'MarketValue', '7dPct', 'PurchasePrice', 'PurchaseYear', 'PnL', 'PnLPct', 'Note'];
+      const esc = (v: any) => { const s = v == null ? '' : String(v); return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
+      const lines = [head.join(',')];
+      coll.items.forEach((it: any) => {
+        const w = collWatch(it); const price = w ? w.price : null;
+        const p = (it.purchasePrice != null && price != null) ? (price - it.purchasePrice) : null;
+        const pc = (p != null && it.purchasePrice > 0) ? (p / it.purchasePrice * 100).toFixed(1) : '';
+        lines.push([it.ref, w ? w.brand : '', w ? w.name : '', w ? (w.nickname || '') : '', price == null ? '' : price,
+          w && w.change7d != null ? w.change7d : '', it.purchasePrice == null ? '' : it.purchasePrice,
+          it.purchaseYear == null ? '' : it.purchaseYear, p == null ? '' : Math.round(p), pc, it.note || ''].map(esc).join(','));
+      });
+      downloadBlob(lines.join('\n'), 'watchout-collection.csv', 'text/csv;charset=utf-8;');
+    };
+    (window as any).exportCollJSON = () => downloadBlob(JSON.stringify(coll, null, 2), 'watchout-collection.json', 'application/json');
+    (window as any).importCollFile = (input: HTMLInputElement) => {
+      const file = input.files && input.files[0]; if (!file) return;
+      const reader = new FileReader();
+      reader.onload = () => {
+        try {
+          const j = JSON.parse(String(reader.result));
+          if (j && Array.isArray(j.items)) { coll = { v: 1, items: j.items }; saveColl(); collSel = null; collEditIdx = null; renderCollForm(); buildCollection(); }
+          else alert('That file is not a valid WatchOut collection export.');
+        } catch { alert('Could not read that file — is it a WatchOut collection JSON?'); }
+        input.value = '';
+      };
+      reader.readAsText(file);
+    };
+    buildCollection();
 
     // ── WATCHLISTS ──
     const myWatchlist = oneEachBrand.slice(0, 4);
@@ -921,6 +1086,62 @@ export default function Home() {
         .mkt-deal-go{font-weight:600;color:var(--red);border-bottom:1px solid var(--red);white-space:nowrap;}
         .mkt-deal-go:hover{color:var(--ink);border-bottom-color:var(--ink);}
 
+        /* MY COLLECTION */
+        .coll-stats{display:flex;gap:clamp(1.2rem,5vw,3rem);flex-wrap:wrap;padding:0.4rem 0 0.9rem;border-bottom:1px solid var(--line);margin-bottom:0.9rem;}
+        .coll-stat{display:flex;flex-direction:column;gap:0.25rem;}
+        .coll-stat-l{font-size:0.64rem;font-weight:600;letter-spacing:0.14em;text-transform:uppercase;color:var(--ink-3);}
+        .coll-stat-v{font-family:var(--serif);font-size:1.55rem;font-weight:600;color:var(--ink);line-height:1;}
+        .coll-stat-v .up{color:var(--gain);}.coll-stat-v .down{color:var(--red);}.coll-stat-v .flat{color:var(--ink-3);}
+        .coll-caveat{font-size:0.74rem;color:var(--ink-3);margin-bottom:1.2rem;}
+        .coll-caveat b{color:var(--ink-2);}
+        .coll-add{position:relative;margin-bottom:1.2rem;max-width:660px;}
+        .coll-search-wrap{position:relative;}
+        .coll-search-in{width:100%;font-family:var(--sans);font-size:0.9rem;color:var(--ink);background:var(--surface);border:1px solid var(--line);padding:0.7rem 0.9rem;}
+        .coll-search-in:focus{border-color:var(--red);outline:none;}
+        .coll-search-results{position:absolute;z-index:5;left:0;right:0;top:calc(100% + 2px);background:var(--surface);border:1px solid var(--line);box-shadow:0 8px 24px rgba(0,0,0,0.1);max-height:320px;overflow-y:auto;}
+        .coll-opt{display:flex;justify-content:space-between;align-items:center;gap:1rem;width:100%;text-align:left;padding:0.6rem 0.85rem;background:transparent;border:none;border-bottom:1px solid var(--line);cursor:pointer;font-size:0.85rem;color:var(--ink);}
+        .coll-opt:last-child{border-bottom:none;}
+        .coll-opt:hover{background:var(--paper);}
+        .coll-opt-ref{font-family:var(--mono);font-size:0.74rem;color:var(--ink-3);white-space:nowrap;}
+        .coll-form{margin-top:0.8rem;background:var(--surface);border:1px solid var(--line);border-left:3px solid var(--red);padding:0.9rem 1rem;}
+        .coll-form-h{font-size:0.86rem;color:var(--ink-2);margin-bottom:0.7rem;}
+        .coll-form-h b{font-weight:600;color:var(--ink);}
+        .coll-form-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:0.7rem;margin-bottom:0.8rem;}
+        .coll-form-grid label{display:flex;flex-direction:column;gap:0.3rem;font-size:0.62rem;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;color:var(--ink-3);}
+        .coll-form-grid input{font-family:var(--sans);font-size:0.88rem;color:var(--ink);background:var(--paper);border:1px solid var(--line);padding:0.5rem 0.6rem;}
+        .coll-form-grid input:focus{border-color:var(--red);outline:none;}
+        .coll-form-actions{display:flex;gap:0.6rem;}
+        .coll-save{font-size:0.8rem;font-weight:600;color:var(--paper);background:var(--ink);border:none;padding:0.55rem 1.1rem;cursor:pointer;}
+        .coll-save:hover{background:var(--red);}
+        .coll-cancel{font-size:0.8rem;font-weight:500;color:var(--ink-2);background:transparent;border:1px solid var(--line);padding:0.55rem 1rem;cursor:pointer;}
+        .coll-cancel:hover{border-color:var(--red);color:var(--red);}
+        .coll-toolbar{display:flex;gap:0.6rem;margin-bottom:1rem;flex-wrap:wrap;}
+        .coll-btn{display:inline-flex;align-items:center;font-size:0.78rem;font-weight:600;color:var(--ink);background:var(--surface);border:1px solid var(--line);padding:0.5rem 0.9rem;cursor:pointer;}
+        .coll-btn:hover{border-color:var(--red);color:var(--red);}
+        .coll-import{cursor:pointer;}
+        .coll-table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums;}
+        .coll-table th{font-size:0.62rem;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:var(--ink-3);padding:0.6rem 0.75rem;text-align:left;white-space:nowrap;border-bottom:1.5px solid var(--ink);}
+        .coll-table th.th-num{text-align:right;}
+        .coll-table td{padding:0.7rem 0.75rem;border-bottom:1px solid var(--line);font-size:0.85rem;vertical-align:middle;}
+        .coll-table tr:hover td{background:var(--surface);}
+        .coll-id{display:flex;align-items:center;gap:0.8rem;}
+        .coll-thumb{width:44px;height:44px;flex:none;background:#EFE7D5;overflow:hidden;display:flex;align-items:center;justify-content:center;}
+        .coll-img{width:100%;height:100%;object-fit:cover;}
+        .coll-fb{width:100%;height:100%;align-items:center;justify-content:center;}
+        .coll-fb svg{width:46%;height:46%;color:var(--ink-3);}
+        .coll-name{display:block;font-family:var(--serif);font-size:0.98rem;font-weight:500;color:var(--ink);}
+        .coll-sub{display:block;font-size:0.7rem;color:var(--ink-3);margin-top:1px;}
+        .coll-val{font-weight:600;}
+        .coll-actions{text-align:right;white-space:nowrap;}
+        .coll-edit{font-size:0.74rem;color:var(--ink-2);background:transparent;border:1px solid var(--line);padding:0.32rem 0.7rem;cursor:pointer;margin-right:0.4rem;}
+        .coll-edit:hover{border-color:var(--red);color:var(--red);}
+        .coll-rm{font-size:0.95rem;color:var(--ink-3);background:transparent;border:none;cursor:pointer;padding:0.2rem 0.4rem;}
+        .coll-rm:hover{color:var(--red);}
+        .coll-empty{text-align:center;padding:3rem 1rem;border:1px dashed var(--line);background:var(--surface);}
+        .coll-empty-ic svg{width:44px;height:44px;color:var(--ink-3);}
+        .coll-empty-t{font-family:var(--serif);font-size:1.2rem;font-weight:500;color:var(--ink);margin:0.8rem 0 0.4rem;}
+        .coll-empty-d{font-size:0.85rem;color:var(--ink-3);max-width:460px;margin:0 auto;}
+
         /* WATCHLISTS */
         .wl-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(340px,100%),1fr));gap:1.2rem;}
         .wl-card{background:var(--surface);border:1px solid var(--line);padding:1.3rem;}
@@ -1094,7 +1315,7 @@ export default function Home() {
       <nav className="topnav">
         <a className="logo" href="#" onClick={(e) => { e.preventDefault(); (window as any).switchTab('home'); }}>Watch<em>Out</em></a>
         <div className="nav-tabs">
-          {[['home','Home'],['pro','Pro'],['market','Market'],['watchlists','Watchlists'],['alerts','Alerts'],['account','Account']].map(([id, label]) => (
+          {[['home','Home'],['pro','Pro'],['market','Market'],['collection','Collection'],['watchlists','Watchlists'],['alerts','Alerts'],['account','Account']].map(([id, label]) => (
             <button key={id} className={`nav-tab${id === 'home' ? ' active' : ''}${id === 'pro' ? ' nav-tab-pro' : ''}`} id={`tab-${id}`} onClick={() => (window as any).switchTab(id)}>
               <span className="tab-icon" dangerouslySetInnerHTML={{ __html: SVG[id] }} /><span>{label}</span>
             </button>
@@ -1295,6 +1516,33 @@ export default function Home() {
             <table className="mkt-table"><thead><tr><th>#</th><th>Watch</th><th>Price</th><th title="Change in average listed price over the last 7 days">7-day &Delta;</th><th>Volume</th><th>Alert</th></tr></thead><tbody id="mktBody"></tbody></table>
           </div>
           <div className="trend-legend"><span className="tl-up">&#9650; green</span> = avg listed price rising &middot; <span className="tl-dn">&#9660; red</span> = falling &middot; <span className="tl-deal">&#9670; Deal</span> = cheapest listing below its 30-day usual</div>
+        </div>
+      </div>
+
+      {/* ── COLLECTION PAGE ── */}
+      <div className="wo-page" id="page-collection">
+        <div className="page-wrap">
+          <div className="page-head"><p className="kicker">My collection</p><h2 className="page-h">Your collection</h2><div className="rule"></div></div>
+          <div className="coll-stats">
+            <div className="coll-stat"><span className="coll-stat-l">Watches</span><span className="coll-stat-v" id="collCount">0</span></div>
+            <div className="coll-stat"><span className="coll-stat-l">Market value</span><span className="coll-stat-v" id="collValue">&mdash;</span></div>
+            <div className="coll-stat"><span className="coll-stat-l">Unrealized P&amp;L</span><span className="coll-stat-v" id="collPnl">&mdash;</span></div>
+          </div>
+          <p className="coll-caveat">Estimated from current market listings (average <b>asking</b> price) &mdash; not realized sold prices.</p>
+          <div className="coll-add">
+            <div className="coll-search-wrap">
+              <input id="collSearchInput" className="coll-search-in" type="text" autoComplete="off" placeholder="Search a watch to add — ref, brand, model, or nickname…"
+                onInput={(e) => (window as any).collSearch((e.target as HTMLInputElement).value)} />
+              <div className="coll-search-results" id="collSearchResults" style={{ display: 'none' }}></div>
+            </div>
+            <div className="coll-form" id="collForm" style={{ display: 'none' }}></div>
+          </div>
+          <div className="coll-toolbar" id="collToolbar" style={{ display: 'none' }}>
+            <button className="pro-export" onClick={() => (window as any).exportCollCSV()}><span dangerouslySetInnerHTML={{ __html: SVG.trending }} />Export CSV</button>
+            <button className="coll-btn" onClick={() => (window as any).exportCollJSON()}>Export JSON</button>
+            <label className="coll-btn coll-import">Import JSON<input type="file" accept="application/json,.json" style={{ display: 'none' }} onChange={(e) => (window as any).importCollFile(e.currentTarget)} /></label>
+          </div>
+          <div id="collBody"></div>
         </div>
       </div>
 
