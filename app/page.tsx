@@ -228,8 +228,13 @@ export default function Home() {
     if (featPhoto) {
       const match = WATCHES.find(w => (w.ref && FEATURED.reference && w.ref.replace(/\s/g, '').toLowerCase().includes(FEATURED.reference.replace(/\s/g, '').toLowerCase().slice(0, 6)))
         || (w.brand === FEATURED.brand));
+      // Editorial "featured" capsule = standalone marketing use, which our eBay
+      // guardrail holds pending a rights review — so NEVER use an eBay listing
+      // photo here. Only owned/licensed artwork via FEATURED.image; otherwise the
+      // clean SVG placeholder. (Distinct from the in-context linked thumbnails in
+      // the market/pro/detail views, which the guardrail permits.)
       const fw = { brand: FEATURED.brand, name: FEATURED.model, ref: FEATURED.reference,
-                   img: FEATURED.image || (match && match.img) || '' };
+                   img: FEATURED.image || '' };
       featPhoto.innerHTML = `<a href="${ebayUrl(fw)}" target="_blank" rel="noopener noreferrer" aria-label="${FEATURED.brand} ${FEATURED.model} on eBay">${photoInner(fw, 'feat-img', 'feat-fb')}</a>`;
     }
 
@@ -1175,7 +1180,7 @@ export default function Home() {
           <div className="plans">
             {[
               { badge:'Always free', name:'Free', sub:'Get started today', price:'0', per:'/ mo', seats:'1 user', features:['Basic price tracking','3 watchlist items','Daily updates','1 email alert'], dim:['Ads shown','No price history'], hot:false },
-              { badge:'Most popular', name:'Personal', sub:'Collectors & enthusiasts', price:'19', per:'.99 / mo', seats:'Up to 2 users', features:['Unlimited watchlists','Hourly updates','SMS + email alerts','Full price history','Zero ads','14-day free trial'], dim:[], hot:true },
+              { badge:'Most popular', name:'Personal', sub:'Collectors & enthusiasts', price:'19', per:'.99 / mo', seats:'Up to 2 users', features:['Unlimited watchlists','Hourly updates','SMS + email alerts','Full price history','Zero ads','Free during beta'], dim:[], hot:true },
               { badge:'For teams', name:'Corporate', sub:'Dealers & small teams', price:'79', per:'.99 / mo', seats:'Up to 10 users', features:['Everything in Personal','Team watchlists','Market reports','API access','Zero ads','Priority support'], dim:[], hot:false },
               { badge:'Enterprise', name:'Enterprise', sub:'Large organizations', price:'299', per:'+ / mo', seats:'Unlimited users', features:['Everything in Corporate','Dedicated manager','Custom integrations','White-label reports','SLA guarantee','Zero ads'], dim:[], hot:false },
             ].map(p => (
@@ -1189,7 +1194,7 @@ export default function Home() {
                   {p.features.map(f => <li key={f}>{f}</li>)}
                   {p.dim.map(f => <li key={f} className="dim">{f}</li>)}
                 </ul>
-                <button className="plan-btn" onClick={() => (window as any).openModal(p.name === 'Free' ? 'free' : undefined)}>{p.name === 'Enterprise' ? 'Contact sales' : p.name === 'Free' ? 'Get free access' : 'Start free trial'}</button>
+                <button className="plan-btn" onClick={() => (window as any).openModal(p.name === 'Free' ? 'free' : undefined)}>{p.name === 'Enterprise' ? 'Contact sales' : p.name === 'Free' ? 'Get free access' : 'Get started'}</button>
                 {p.name === 'Free' && <p className="plan-adnote">Supported by non-intrusive ads</p>}
               </div>
             ))}
@@ -1203,7 +1208,7 @@ export default function Home() {
               <div className="cancel-text">Cancel any time. One click. No questions asked.</div>
               <div className="cancel-sub">Your data is yours. <strong>We export everything on the way out.</strong></div>
             </div>
-            <a href="#" className="hero-cta" onClick={(e) => { e.preventDefault(); (window as any).openModal(); }}>Start free trial &rarr;</a>
+            <a href="#" className="hero-cta" onClick={(e) => { e.preventDefault(); (window as any).openModal(); }}>Get started &rarr;</a>
           </div>
         </section>
 
@@ -1402,7 +1407,7 @@ export default function Home() {
             </select>
           </div>
           <button className="m-submit">Reserve my spot &rarr;</button>
-          <p className="m-note">14-day free trial on paid plans. No credit card required. Cancel any time.</p>
+          <p className="m-note">Free during our public beta. No credit card required.</p>
         </div>
       </div>
     </>
