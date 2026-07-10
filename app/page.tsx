@@ -9,6 +9,7 @@ const _svg = (inner: string) =>
 const SVG: Record<string, string> = {
   home: _svg('<path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M9 22V12h6v10"/>'),
   market: _svg('<path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/>'),
+  pro: _svg('<rect x="3" y="4" width="18" height="16" rx="1.5"/><path d="M3 9h18"/><path d="M8 4v16"/>'),
   watchlists: _svg('<path d="M8 6h13M8 12h13M8 18h13"/><path d="M3 6h.01M3 12h.01M3 18h.01"/>'),
   alerts: _svg('<path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/>'),
   account: _svg('<path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>'),
@@ -37,16 +38,16 @@ export default function Home() {
   useEffect(() => {
     // ── WATCH DATA (placeholder; replaced by live data from the API below) ──
     const PLACEHOLDER = [
-      { brand: 'Rolex', name: 'Submariner Date', ref: '126610LN', price: 14250, change: 2.3, img: '', count: 120 },
-      { brand: 'Patek Philippe', name: 'Nautilus', ref: '5711/1A-010', price: 51800, change: -1.1, img: '', count: 40 },
-      { brand: 'Audemars Piguet', name: 'Royal Oak 41mm', ref: '15500ST', price: 36400, change: 0.8, img: '', count: 35 },
-      { brand: 'Rolex', name: 'Daytona', ref: '116500LN', price: 28900, change: -0.6, img: '', count: 90 },
-      { brand: 'Omega', name: 'Speedmaster Pro', ref: '310.30.42.50', price: 6100, change: 4.2, img: '', count: 110 },
-      { brand: 'Tudor', name: 'Black Bay 58', ref: 'M79030N', price: 3800, change: 3.1, img: '', count: 75 },
-      { brand: 'IWC', name: 'Pilot Chrono', ref: 'IW377709', price: 7200, change: 1.5, img: '', count: 30 },
-      { brand: 'Cartier', name: 'Santos Large', ref: 'WSSA0018', price: 8600, change: 0.3, img: '', count: 28 },
-      { brand: 'Rolex', name: 'GMT-Master II', ref: '126710BLNR', price: 17400, change: 1.8, img: '', count: 60 },
-      { brand: 'Vacheron', name: 'Overseas', ref: '4500V', price: 28000, change: 0.4, img: '', count: 18 },
+      { brand: 'Rolex', name: 'Submariner Date', ref: '126610LN', price: 14250, change: 2.3, change7d: 2.6, img: '', count: 120, gender: 'men', material: 'Steel' },
+      { brand: 'Patek Philippe', name: 'Nautilus', ref: '5711/1A-010', price: 51800, change: -1.1, change7d: -3.4, img: '', count: 40, gender: 'men', material: 'Steel' },
+      { brand: 'Audemars Piguet', name: 'Royal Oak 41mm', ref: '15500ST', price: 36400, change: 0.8, change7d: 1.2, img: '', count: 35, gender: 'men', material: 'Steel' },
+      { brand: 'Rolex', name: 'Daytona', ref: '116500LN', price: 28900, change: -0.6, change7d: -3.8, img: '', count: 90, gender: 'men', material: 'Steel' },
+      { brand: 'Omega', name: 'Speedmaster Pro', ref: '310.30.42.50', price: 6100, change: 4.2, change7d: 2.4, img: '', count: 110, gender: 'men', material: 'Steel' },
+      { brand: 'Tudor', name: 'Black Bay 58', ref: 'M79030N', price: 3800, change: 3.1, change7d: 0.9, img: '', count: 75, gender: 'unisex', material: 'Steel' },
+      { brand: 'IWC', name: 'Pilot Chrono', ref: 'IW377709', price: 7200, change: 1.5, change7d: 0.2, img: '', count: 30, gender: 'men', material: 'Steel' },
+      { brand: 'Cartier', name: 'Santos Large', ref: 'WSSA0018', price: 8600, change: 0.3, change7d: -0.4, img: '', count: 28, gender: 'unisex', material: 'Steel' },
+      { brand: 'Rolex', name: 'GMT-Master II', ref: '126710BLNR', price: 17400, change: 1.8, change7d: 2.1, img: '', count: 60, gender: 'men', material: 'Steel' },
+      { brand: 'Cartier', name: 'Ballon Bleu 33mm', ref: 'W6920085', price: 6900, change: 0.4, change7d: -0.2, img: '', count: 18, gender: 'women', material: 'Steel' },
     ];
 
     const fmt = (p: number) => '$' + Math.round(p).toLocaleString();
@@ -56,6 +57,9 @@ export default function Home() {
       (c == null) ? '—' : (c >= 0 ? '▲ +' : '▼ ') + Math.abs(c).toFixed(1) + '%';
     const chgClass = (c: number | null | undefined) =>
       (c == null) ? 'flat' : (c >= 0 ? 'up' : 'down');
+    // Compact signed % for the dense Pro grid (no arrows): "+2.3" / "-3.4" / "—".
+    const fmtChgShort = (c: number | null | undefined) =>
+      (c == null) ? '—' : (c >= 0 ? '+' : '−') + Math.abs(c).toFixed(1);
 
     // Link a watch to its EXACT eBay listing (the one its photo came from). Falls
     // back to a durable category-scoped search only when we have no listing_url
@@ -118,6 +122,7 @@ export default function Home() {
         document.querySelectorAll('.mkt-filter').forEach((b, i) => b.classList.toggle('on', i === 0));
         buildMarket('all');
       }
+      if (name === 'pro') buildPro();   // (re)render the terminal with current filters/sort
       window.scrollTo(0, 0);
       document.documentElement.scrollTop = 0;   // belt-and-suspenders for the reset-to-top
     };
@@ -289,6 +294,135 @@ export default function Home() {
       buildMarket(brand);
     };
 
+    // ── PRO TERMINAL (dense reseller grid) ──
+    // Reuses the SAME /market data (WATCHES). Fully visible for now — no gating;
+    // a free-tier cap comes later when auth is wired. All controls mutate proState
+    // and re-render client-side (instant search / sort / filter, no refetch).
+    const proState: any = { q: '', brand: 'all', gender: 'all', material: 'all', sort: 'count', dir: 'desc' };
+    const genderLabel = (g: string) =>
+      g === 'men' ? "Men's" : g === 'women' ? "Women's" : g === 'unisex' ? 'Unisex' : '—';
+    // Signal from the 7d move (server sends it; recompute as a fallback for
+    // placeholder rows). BUY on a ≥3% weekly dip, HOT on a ≥2% weekly rise.
+    const signalOf = (w: any) =>
+      w.signal || (w.change7d == null ? '' : (w.change7d <= -3 ? 'BUY' : w.change7d >= 2 ? 'HOT' : ''));
+    const proBrands = [...new Set(WATCHES.map((w: any) => w.brand))].sort() as string[];
+    const proMaterials = [...new Set(WATCHES.map((w: any) => w.material).filter(Boolean))].sort() as string[];
+
+    const proFiltered = () => {
+      const q = proState.q.trim().toLowerCase();
+      const rows = WATCHES.filter((w: any) => {
+        if (proState.brand !== 'all' && w.brand !== proState.brand) return false;
+        if (proState.gender !== 'all' && (w.gender || '') !== proState.gender) return false;
+        if (proState.material !== 'all' && (w.material || '') !== proState.material) return false;
+        if (q) {
+          const hay = [w.brand, w.name, w.ref, w.nickname, w.material].filter(Boolean).join(' ').toLowerCase();
+          if (!hay.includes(q)) return false;
+        }
+        return true;
+      });
+      const sortVal = (w: any) => {
+        switch (proState.sort) {
+          case 'ref': return (w.ref || '').toLowerCase();
+          case 'name': return (w.brand + ' ' + w.name).toLowerCase();
+          case 'gender': return w.gender || 'zzz';
+          case 'material': return (w.material || 'zzz').toLowerCase();
+          case 'price': return w.price || 0;
+          case 'change': return w.change == null ? -Infinity : w.change;
+          case 'change7d': return w.change7d == null ? -Infinity : w.change7d;
+          case 'lowhigh': return w.low == null ? -Infinity : w.low;
+          case 'count': return w.count == null ? -1 : w.count;
+          case 'signal': { const s = signalOf(w); return s === 'BUY' ? 0 : s === 'HOT' ? 1 : 2; }
+          default: return 0;
+        }
+      };
+      rows.sort((a: any, b: any) => {
+        const av = sortVal(a), bv = sortVal(b);
+        const c = (typeof av === 'number' && typeof bv === 'number')
+          ? av - bv : String(av).localeCompare(String(bv));
+        return proState.dir === 'asc' ? c : -c;
+      });
+      return rows;
+    };
+
+    const proBadge = (w: any) => {
+      const s = signalOf(w);
+      return s ? `<span class="sig sig-${s.toLowerCase()}">${s}</span>` : '<span class="sig-none">·</span>';
+    };
+    const genderCell = (w: any) => {
+      if (!w.gender) return '<span class="g-none">—</span>';
+      const est = w.genderSrc === 'size'
+        ? '<span class="g-est" title="Estimated from case size">~</span>' : '';
+      return `<span class="g-tag g-${w.gender}">${genderLabel(w.gender)}</span>${est}`;
+    };
+
+    const buildPro = () => {
+      const tbody = document.getElementById('proBody');
+      if (!tbody) return;
+      const rows = proFiltered();
+      const cEl = document.getElementById('proCount');
+      if (cEl) cEl.textContent = rows.length.toLocaleString();
+      tbody.innerHTML = rows.map((w: any) => `
+        <tr>
+          <td class="p-ref"><a href="${watchUrl(w)}">${w.ref || '—'}</a></td>
+          <td class="p-watch"><span class="p-brand">${w.brand}</span> ${w.name}${w.nickname ? `<span class="p-nick">${w.nickname}</span>` : ''}</td>
+          <td>${genderCell(w)}</td>
+          <td class="p-mat">${w.material || '—'}</td>
+          <td class="p-num p-price">${fmt(w.price)}</td>
+          <td class="p-num ${chgClass(w.change)}">${fmtChgShort(w.change)}</td>
+          <td class="p-num ${chgClass(w.change7d)}">${fmtChgShort(w.change7d)}</td>
+          <td class="p-num p-lh">${w.low != null ? fmt(w.low) : '—'} <span class="p-sl">/</span> ${w.high != null ? fmt(w.high) : '—'}</td>
+          <td class="p-num">${w.count != null ? w.count : '—'}</td>
+          <td class="p-sig">${proBadge(w)}</td>
+        </tr>`).join('')
+        || `<tr><td colspan="10" class="p-empty">No watches match these filters.</td></tr>`;
+      document.querySelectorAll('#proHead th[data-key]').forEach(th => {
+        const active = th.getAttribute('data-key') === proState.sort;
+        th.classList.toggle('sorted', active);
+        th.setAttribute('data-dir', active ? proState.dir : '');
+      });
+    };
+
+    (window as any).proSort = (key: string) => {
+      if (proState.sort === key) proState.dir = proState.dir === 'asc' ? 'desc' : 'asc';
+      else { proState.sort = key; proState.dir = ['ref', 'name', 'gender', 'material'].includes(key) ? 'asc' : 'desc'; }
+      buildPro();
+    };
+    (window as any).proSearch = (v: string) => { proState.q = v; buildPro(); };
+    (window as any).proSetSelect = (kind: string, v: string) => { proState[kind] = v; buildPro(); };
+    (window as any).proSetGender = (btn: HTMLElement, v: string) => {
+      document.querySelectorAll('#proGenderSeg .pro-seg-b').forEach(b => b.classList.remove('on'));
+      btn.classList.add('on');
+      proState.gender = v; buildPro();
+    };
+    // CSV export of the CURRENT filtered + sorted view.
+    (window as any).exportProCSV = () => {
+      const rows = proFiltered();
+      const head = ['Ref', 'Brand', 'Model', 'Nickname', 'Gender', 'GenderSource', 'Material',
+        'Price', '24h%', '7d%', 'Low', 'High', 'Listings', 'Signal'];
+      const esc = (v: any) => { const s = v == null ? '' : String(v); return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
+      const lines = [head.join(',')];
+      rows.forEach((w: any) => lines.push([w.ref, w.brand, w.name, w.nickname || '', w.gender || '',
+        w.genderSrc || '', w.material || '', w.price, w.change == null ? '' : w.change,
+        w.change7d == null ? '' : w.change7d, w.low == null ? '' : w.low, w.high == null ? '' : w.high,
+        w.count == null ? '' : w.count, signalOf(w)].map(esc).join(',')));
+      const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'watchout-pro.csv';
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+    };
+    // Fill the brand + material dropdowns from the live data (once).
+    const fillSelect = (id: string, opts: string[], allLabel: string) => {
+      const sel = document.getElementById(id);
+      if (!sel) return;
+      sel.innerHTML = `<option value="all">${allLabel}</option>`
+        + opts.map(o => `<option value="${o}">${o}</option>`).join('');
+    };
+    fillSelect('proBrandSel', proBrands, 'All brands');
+    fillSelect('proMatSel', proMaterials, 'All materials');
+    buildPro();
+
     // ── WATCHLISTS ──
     const myWatchlist = oneEachBrand.slice(0, 4);
     const grid = document.getElementById('wlGrid');
@@ -417,12 +551,17 @@ export default function Home() {
           price: Number(w.price) || 0,
           change: w.change == null ? null : Number(w.change),      // 24h window (nullable)
           change7d: w.change_7d == null ? null : Number(w.change_7d),
+          low: w.low == null ? null : Number(w.low),
+          high: w.high == null ? null : Number(w.high),
           count: w.num_listings,
           spark: sparks[wkey(w.brand, w.name, w.ref)] || [],
           img: w.image_url || '',
           listing_url: w.listing_url || '',
           year: w.year || '',
           material: w.material || '',
+          gender: w.gender || '',            // men|women|unisex|'' (curated>eBay>size)
+          genderSrc: w.gender_src || '',     // 'size' = estimated from case diameter
+          signal: w.signal || '',            // BUY|HOT|'' from the 7d move
         }));
         // Entitlements drive the locked states + ads slot; default to "unlocked"
         // so the placeholder path (API down) still shows everything.
@@ -470,6 +609,7 @@ export default function Home() {
           --gain:#3E7D5A;    /* up/gain */
           --serif:var(--font-serif),Georgia,'Times New Roman',serif;
           --sans:var(--font-sans),system-ui,-apple-system,sans-serif;
+          --mono:ui-monospace,'SF Mono',SFMono-Regular,Menlo,Consolas,'Liberation Mono',monospace;
         }
         html{scroll-behavior:smooth;}
         body{font-family:var(--sans);background:var(--paper);color:var(--ink);overflow-x:hidden;font-variant-numeric:tabular-nums;-webkit-font-smoothing:antialiased;line-height:1.5;}
@@ -513,6 +653,11 @@ export default function Home() {
         .nav-tab{display:flex;align-items:center;font-size:0.82rem;font-weight:500;color:var(--ink-2);padding:0 clamp(0.6rem,1.6vw,1rem);border:none;background:transparent;cursor:pointer;transition:color 0.15s;white-space:nowrap;border-bottom:2px solid transparent;}
         .nav-tab:hover{color:var(--ink);}
         .nav-tab.active{color:var(--ink);border-bottom-color:var(--red);}
+        /* Pro tab — accented so it reads as the "power user" view. */
+        .nav-tab-pro{color:var(--red);font-weight:600;}
+        .nav-tab-pro:hover{color:var(--red);}
+        .nav-tab-pro.active{color:var(--red);border-bottom-color:var(--red);}
+        .nav-tab-pro .tab-icon svg{stroke-width:2;}
         .tab-icon{display:inline-flex;align-items:center;margin-right:0.4rem;}
         .tab-icon svg{width:15px;height:15px;}
         .nav-r{display:flex;align-items:center;gap:0.5rem;margin-left:auto;flex-shrink:0;}
@@ -657,6 +802,63 @@ export default function Home() {
         .badge-flat{color:var(--ink-3);border-color:var(--line);background:transparent;}
         .alert-btn{font-size:0.78rem;padding:0.36rem 0.8rem;background:transparent;border:1px solid var(--line);color:var(--ink-2);cursor:pointer;transition:all 0.15s;white-space:nowrap;}
         .alert-btn:hover{border-color:var(--red);color:var(--red);}
+
+        /* PRO TERMINAL — dense, data-first grid; cream chrome, businesslike table */
+        .pro-wrap{padding:clamp(1.2rem,3vw,2rem) clamp(0.8rem,3vw,2rem);margin-top:60px;min-height:calc(100vh - 60px);}
+        .pro-head{display:flex;justify-content:space-between;align-items:flex-end;flex-wrap:wrap;gap:0.8rem;margin-bottom:1.2rem;}
+        .pro-live{display:flex;align-items:center;gap:0.45rem;font-size:0.72rem;font-weight:600;letter-spacing:0.04em;text-transform:uppercase;color:var(--ink-3);}
+        .pro-toolbar{display:flex;align-items:center;gap:0.6rem;flex-wrap:wrap;margin-bottom:1rem;padding-bottom:1rem;border-bottom:1.5px solid var(--ink);}
+        .pro-search{display:flex;align-items:center;gap:0.45rem;flex:1;min-width:200px;background:var(--surface);border:1px solid var(--line);padding:0.5rem 0.75rem;}
+        .pro-search:focus-within{border-color:var(--red);}
+        .pro-search-ico svg{width:15px;height:15px;color:var(--ink-3);display:block;}
+        .pro-search-in{flex:1;border:none;background:transparent;font-family:var(--sans);font-size:0.86rem;color:var(--ink);outline:none;}
+        .pro-select{font-family:var(--sans);font-size:0.82rem;color:var(--ink);background:var(--surface);border:1px solid var(--line);padding:0.5rem 0.7rem;cursor:pointer;max-width:190px;}
+        .pro-select:focus{border-color:var(--red);outline:none;}
+        .pro-seg{display:flex;border:1px solid var(--line);overflow:hidden;flex:none;}
+        .pro-seg-b{font-family:var(--sans);font-size:0.8rem;font-weight:500;color:var(--ink-2);background:var(--surface);border:none;border-right:1px solid var(--line);padding:0.5rem 0.85rem;cursor:pointer;transition:all 0.12s;}
+        .pro-seg-b:last-child{border-right:none;}
+        .pro-seg-b:hover{color:var(--ink);}
+        .pro-seg-b.on{background:var(--ink);color:var(--paper);}
+        .pro-toolbar-r{display:flex;align-items:center;gap:0.9rem;margin-left:auto;}
+        .pro-count-wrap{font-size:0.78rem;color:var(--ink-3);white-space:nowrap;}
+        .pro-count-wrap b{font-family:var(--mono);color:var(--ink);font-weight:600;}
+        .pro-export{display:flex;align-items:center;gap:0.4rem;font-size:0.78rem;font-weight:600;color:var(--paper);background:var(--ink);border:none;padding:0.5rem 0.9rem;cursor:pointer;transition:background 0.15s;white-space:nowrap;}
+        .pro-export:hover{background:var(--red);}
+        .pro-export svg{width:13px;height:13px;}
+        .pro-tablewrap{overflow-x:auto;border:1px solid var(--line);}
+        .pro-table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums;}
+        .pro-table thead th{position:sticky;top:60px;z-index:2;background:var(--paper);font-size:0.62rem;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:var(--ink-2);padding:0.6rem 0.75rem;text-align:left;white-space:nowrap;cursor:pointer;user-select:none;border-bottom:1.5px solid var(--ink);transition:color 0.12s;}
+        .pro-table thead th.th-num{text-align:right;}
+        .pro-table thead th:hover{color:var(--red);}
+        .pro-table thead th.sorted{color:var(--red);}
+        .pro-table thead th.sorted::after{content:'▾';margin-left:0.3rem;font-size:0.7em;}
+        .pro-table thead th.sorted[data-dir="asc"]::after{content:'▴';}
+        .pro-table tbody td{padding:0.5rem 0.75rem;border-bottom:1px solid var(--line);font-size:0.82rem;color:var(--ink);white-space:nowrap;}
+        .pro-table tbody tr:nth-child(even) td{background:rgba(230,220,198,0.28);}
+        .pro-table tbody tr:hover td{background:rgba(168,54,43,0.06);}
+        .p-num{text-align:right;font-family:var(--mono);font-size:0.8rem;}
+        .p-num.up{color:var(--gain);}.p-num.down{color:var(--red);}.p-num.flat{color:var(--ink-3);}
+        .p-ref a{font-family:var(--mono);font-size:0.78rem;color:var(--ink);text-decoration:none;border-bottom:1px dotted var(--ink-3);}
+        .p-ref a:hover{color:var(--red);border-bottom-color:var(--red);}
+        .p-watch{font-size:0.84rem;max-width:280px;overflow:hidden;text-overflow:ellipsis;}
+        .p-brand{font-weight:600;}
+        .p-nick{display:inline-block;margin-left:0.4rem;font-size:0.62rem;font-weight:600;letter-spacing:0.04em;text-transform:uppercase;color:var(--red);background:rgba(168,54,43,0.08);border:1px solid rgba(168,54,43,0.22);border-radius:999px;padding:0.04rem 0.4rem;vertical-align:middle;}
+        .p-mat{color:var(--ink-2);}
+        .p-price{font-weight:600;color:var(--ink);}
+        .p-lh{color:var(--ink-2);font-size:0.76rem;}
+        .p-sl{color:var(--ink-3);}
+        .g-tag{font-size:0.72rem;font-weight:500;}
+        .g-men{color:#3B5B7A;}.g-women{color:#8A4A78;}.g-unisex{color:var(--ink-2);}
+        .g-none{color:var(--ink-3);}
+        .g-est{color:var(--ink-3);font-weight:700;margin-left:1px;cursor:help;}
+        .p-sig{text-align:left;}
+        .sig{font-family:var(--mono);font-size:0.66rem;font-weight:700;letter-spacing:0.06em;padding:0.12rem 0.45rem;border-radius:3px;}
+        .sig-buy{color:#2E6047;background:rgba(62,125,90,0.14);border:1px solid rgba(62,125,90,0.4);}
+        .sig-hot{color:#93271D;background:rgba(168,54,43,0.12);border:1px solid rgba(168,54,43,0.4);}
+        .sig-none{color:var(--ink-3);}
+        .p-empty{text-align:center;color:var(--ink-3);padding:2.5rem 1rem !important;font-size:0.9rem;}
+        .pro-note{margin-top:0.9rem;font-size:0.72rem;color:var(--ink-3);line-height:1.5;}
+        .pro-note .g-est{color:var(--ink-2);}
 
         /* WATCHLISTS */
         .wl-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(340px,100%),1fr));gap:1.2rem;}
@@ -831,8 +1033,8 @@ export default function Home() {
       <nav className="topnav">
         <a className="logo" href="#" onClick={(e) => { e.preventDefault(); (window as any).switchTab('home'); }}>Watch<em>Out</em></a>
         <div className="nav-tabs">
-          {[['home','Home'],['market','Market'],['watchlists','Watchlists'],['alerts','Alerts'],['account','Account']].map(([id, label]) => (
-            <button key={id} className={`nav-tab${id === 'home' ? ' active' : ''}`} id={`tab-${id}`} onClick={() => (window as any).switchTab(id)}>
+          {[['home','Home'],['pro','Pro'],['market','Market'],['watchlists','Watchlists'],['alerts','Alerts'],['account','Account']].map(([id, label]) => (
+            <button key={id} className={`nav-tab${id === 'home' ? ' active' : ''}${id === 'pro' ? ' nav-tab-pro' : ''}`} id={`tab-${id}`} onClick={() => (window as any).switchTab(id)}>
               <span className="tab-icon" dangerouslySetInnerHTML={{ __html: SVG[id] }} /><span>{label}</span>
             </button>
           ))}
@@ -961,6 +1163,59 @@ export default function Home() {
             <p className="f-legal"><a href="#">Privacy</a> · <a href="#">Terms</a> · <a href="#">Cancel anytime</a></p>
           </div>
         </footer>
+      </div>
+
+      {/* ── PRO TERMINAL PAGE ── */}
+      <div className="wo-page" id="page-pro">
+        <div className="pro-wrap">
+          <div className="pro-head">
+            <div>
+              <p className="kicker">Reseller terminal</p>
+              <h2 className="page-h">WatchOut Pro</h2>
+            </div>
+            <div className="pro-live"><span className="live-dot"></span>Live &middot; refreshed hourly</div>
+          </div>
+          <div className="pro-toolbar">
+            <div className="pro-search">
+              <span className="pro-search-ico" dangerouslySetInnerHTML={{ __html: SVG.market }} />
+              <input id="proSearchInput" className="pro-search-in" type="text" placeholder="Search ref, brand, model, nickname…"
+                onInput={(e) => (window as any).proSearch((e.target as HTMLInputElement).value)} />
+            </div>
+            <select id="proBrandSel" className="pro-select" defaultValue="all"
+              onChange={(e) => (window as any).proSetSelect('brand', e.target.value)}></select>
+            <div className="pro-seg" id="proGenderSeg">
+              {[['all', 'All'], ['men', 'Men'], ['women', 'Women']].map(([val, label]) => (
+                <button key={val} className={`pro-seg-b${val === 'all' ? ' on' : ''}`}
+                  onClick={(e) => (window as any).proSetGender(e.currentTarget, val)}>{label}</button>
+              ))}
+            </div>
+            <select id="proMatSel" className="pro-select" defaultValue="all"
+              onChange={(e) => (window as any).proSetSelect('material', e.target.value)}></select>
+            <div className="pro-toolbar-r">
+              <span className="pro-count-wrap"><b id="proCount">—</b> refs</span>
+              <button className="pro-export" onClick={() => (window as any).exportProCSV()}>
+                <span dangerouslySetInnerHTML={{ __html: SVG.trending }} />Export CSV</button>
+            </div>
+          </div>
+          <div className="pro-tablewrap">
+            <table className="pro-table">
+              <thead id="proHead"><tr>
+                <th data-key="ref" onClick={() => (window as any).proSort('ref')}>Ref</th>
+                <th data-key="name" onClick={() => (window as any).proSort('name')}>Watch</th>
+                <th data-key="gender" onClick={() => (window as any).proSort('gender')}>Gender</th>
+                <th data-key="material" onClick={() => (window as any).proSort('material')}>Material</th>
+                <th data-key="price" className="th-num" onClick={() => (window as any).proSort('price')}>Price</th>
+                <th data-key="change" className="th-num" onClick={() => (window as any).proSort('change')}>24h</th>
+                <th data-key="change7d" className="th-num" onClick={() => (window as any).proSort('change7d')}>7d</th>
+                <th data-key="lowhigh" className="th-num" onClick={() => (window as any).proSort('lowhigh')}>Low / High</th>
+                <th data-key="count" className="th-num" onClick={() => (window as any).proSort('count')}>N</th>
+                <th data-key="signal" onClick={() => (window as any).proSort('signal')}>Signal</th>
+              </tr></thead>
+              <tbody id="proBody"></tbody>
+            </table>
+          </div>
+          <p className="pro-note">Signal is derived from the 7-day move (BUY &le; &minus;3%, HOT &ge; +2%) &mdash; guidance, not advice. Gender: curated &rsaquo; eBay department &rsaquo; <span className="g-est">~</span>estimated from case size.</p>
+        </div>
       </div>
 
       {/* ── MARKET PAGE ── */}
