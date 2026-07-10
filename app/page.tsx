@@ -62,6 +62,10 @@ export default function Home() {
     // color-only — accessibility): "▲ +2.3" / "▼ −3.4" / "—".
     const fmtChgShort = (c: number | null | undefined) =>
       (c == null) ? '—' : (c >= 0 ? '▲ +' : '▼ −') + Math.abs(c).toFixed(1);
+    // Same, but with an explicit % — used in the printed PDF report where there's
+    // no column tooltip/legend to imply the unit.
+    const fmtChgRep = (c: number | null | undefined) =>
+      (c == null) ? '—' : (c >= 0 ? '▲ +' : '▼ −') + Math.abs(c).toFixed(1) + '%';
     // Tooltip copy for a trend cell/header over a given window.
     const trendTip = (win: string) => `Change in average listed price over the last ${win}`;
     // A "deal" = the cheapest live listing is ≥8% below THIS reference's own 30-day
@@ -117,6 +121,9 @@ export default function Home() {
         + `<circle cx="${lx.toFixed(1)}" cy="${ly.toFixed(1)}" r="1.7" fill="${color}"/></svg>`;
     };
 
+    // Latest WatchOut Index snapshot (captured from the /index fetch below) — used
+    // in the Pro PDF report header.
+    let lastIndex: any = null;
     // Everything below renders from whatever watch list it's given (live or placeholder).
     const init = (WATCHES: any[], meta: any = {}) => {
     const ent = meta.ent || { market_cap: null, alerts: true, watchlists: true, ads: false, history_days: null };
@@ -455,6 +462,77 @@ export default function Home() {
       document.body.appendChild(a); a.click(); document.body.removeChild(a);
       setTimeout(() => URL.revokeObjectURL(a.href), 1000);
     };
+
+    // ── PRO MARKET REPORT (print → "Save as PDF"; Brief 4) ──
+    // A WYSIWYG snapshot of the CURRENT filtered/sorted Pro grid: a print-only
+    // report section is populated then window.print() opens the browser's PDF
+    // dialog. Client-side, text-only (no eBay images per the guardrail).
+    const REPORT_ROW_CAP = 500;
+    const median = (arr: number[]) => {
+      if (!arr.length) return null;
+      const s = [...arr].sort((a, b) => a - b); const m = s.length >> 1;
+      return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
+    };
+    const proFilterSummary = (n: number) => {
+      const parts: string[] = [];
+      if (proState.brand !== 'all') parts.push(`Brand: ${proState.brand}`);
+      if (proState.gender !== 'all') parts.push(`Gender: ${proState.gender === 'men' ? "Men's" : proState.gender === 'women' ? "Women's" : proState.gender}`);
+      if (proState.material !== 'all') parts.push(`Material: ${proState.material}`);
+      if (proState.q.trim()) parts.push(`Search: "${proState.q.trim()}"`);
+      if (!parts.length) parts.push('All references');
+      parts.push(`${n.toLocaleString()} reference${n === 1 ? '' : 's'}`);
+      return parts.join(' · ');
+    };
+    const buildProReport = () => {
+      let rows = proFiltered();
+      const totalN = rows.length;
+      const set = (id: string, html: string) => { const e = document.getElementById(id); if (e) e.innerHTML = html; };
+      let capNote = '';
+      if (rows.length > REPORT_ROW_CAP) {
+        rows = [...rows].sort((a: any, b: any) => (b.count || 0) - (a.count || 0)).slice(0, REPORT_ROW_CAP);
+        capNote = `Showing the top ${REPORT_ROW_CAP} of ${totalN.toLocaleString()} references by listing volume — refine filters for a full view.`;
+      }
+      set('repTime', new Date().toLocaleString('en-US', { year: 'numeric', month: 'long', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZoneName: 'short' }));
+      set('repFilter', proFilterSummary(totalN));
+      if (lastIndex && lastIndex.value != null) {
+        const c7 = lastIndex.change_7d, cls = c7 == null ? 'flat' : (c7 >= 0 ? 'up' : 'down');
+        set('repIndex', `WatchOut Index <b>${lastIndex.value.toFixed(2)}</b> <span class="${cls}">${c7 == null ? '' : (c7 >= 0 ? '▲ +' : '▼ ') + Math.abs(c7).toFixed(2) + '% 7d'}</span>`);
+      } else set('repIndex', '');
+      const prices = rows.map((w: any) => w.price).filter((p: any) => p != null);
+      const med = median(prices);
+      const buys = rows.filter((w: any) => signalOf(w) === 'BUY').length;
+      const hots = rows.filter((w: any) => signalOf(w) === 'HOT').length;
+      const withC7 = rows.filter((w: any) => w.change7d != null);
+      const gain = withC7.length ? withC7.reduce((a: any, b: any) => (b.change7d > a.change7d ? b : a)) : null;
+      const decl = withC7.length ? withC7.reduce((a: any, b: any) => (b.change7d < a.change7d ? b : a)) : null;
+      set('repSummary',
+        `<div class="rep-stat"><span class="rep-stat-l">References</span><span class="rep-stat-v">${totalN.toLocaleString()}</span></div>`
+        + `<div class="rep-stat"><span class="rep-stat-l">Median price</span><span class="rep-stat-v">${med != null ? fmt(med) : '—'}</span></div>`
+        + `<div class="rep-stat"><span class="rep-stat-l">BUY signals</span><span class="rep-stat-v">${buys}</span></div>`
+        + `<div class="rep-stat"><span class="rep-stat-l">HOT signals</span><span class="rep-stat-v">${hots}</span></div>`
+        + `<div class="rep-stat"><span class="rep-stat-l">Top gainer 7d</span><span class="rep-stat-v">${gain ? `${gain.ref} ${fmtChgRep(gain.change7d)}` : '—'}</span></div>`
+        + `<div class="rep-stat"><span class="rep-stat-l">Top decliner 7d</span><span class="rep-stat-v">${decl ? `${decl.ref} ${fmtChgRep(decl.change7d)}` : '—'}</span></div>`);
+      set('repCapNote', capNote);
+      const body = document.getElementById('repBody');
+      if (body) body.innerHTML = rows.map((w: any) => `<tr>
+        <td class="rep-ref">${w.ref || '—'}</td>
+        <td>${w.nickname || ''}</td>
+        <td>${w.brand}</td>
+        <td class="rep-num">${fmt(w.price)}</td>
+        <td class="rep-num ${chgClass(w.change)}">${fmtChgRep(w.change)}</td>
+        <td class="rep-num ${chgClass(w.change7d)}">${fmtChgRep(w.change7d)}</td>
+        <td class="rep-num">${w.low != null ? fmt(w.low) : '—'} / ${w.high != null ? fmt(w.high) : '—'}</td>
+        <td class="rep-num">${w.count != null ? w.count : '—'}</td>
+        <td>${signalOf(w) || '—'}</td>
+      </tr>`).join('');
+    };
+    (window as any).exportProPDF = () => {
+      // Dormant dealer-tier gate: permissive until ENFORCE_TIERS sets ent.pdf_export=false.
+      if (ent && ent.pdf_export === false) { (window as any).openModal(); return; }
+      buildProReport();
+      setTimeout(() => window.print(), 60);   // let the report paint, then open the print dialog
+    };
+
     // Fill the brand + material dropdowns from the live data (once).
     const fillSelect = (id: string, opts: string[], allLabel: string) => {
       const sel = document.getElementById(id);
@@ -782,6 +860,7 @@ export default function Home() {
     fetch(`${API}/index?points=30`)
       .then(r => (r.ok ? r.json() : null))
       .then(idx => {
+        if (idx && idx.value != null) lastIndex = idx;   // captured for the Pro PDF report header
         const el = document.getElementById('indexBand');
         if (cancelled || !el || !idx || idx.value == null) return;
         const c = idx.change_24h;
@@ -1282,6 +1361,43 @@ export default function Home() {
         .m-submit:hover{background:#000;}
         .m-note{margin-top:0.7rem;font-size:0.72rem;color:var(--ink-3);text-align:center;line-height:1.5;}
 
+        /* PRO MARKET REPORT (print → PDF, Brief 4) — hidden on screen, shown in print */
+        .pro-report{display:none;}
+        .pro-pdf{background:var(--surface) !important;color:var(--ink) !important;border:1px solid var(--line) !important;}
+        .pro-pdf:hover{background:var(--ink) !important;color:var(--paper) !important;}
+        @media print {
+          @page{size:letter;margin:0.5in;}
+          html,body{background:#fff !important;}
+          /* hide the whole app; the report is the only visible top-level block */
+          .topnav,.wo-page,.overlay{display:none !important;}
+          .pro-report{display:block !important;color:#111;}
+          .rep-head{border-bottom:2px solid #000;padding-bottom:8px;margin-bottom:10px;}
+          .rep-brandrow{display:flex;justify-content:space-between;align-items:baseline;}
+          .rep-brand{font-family:var(--serif);font-size:20px;font-weight:600;color:#000;}
+          .rep-brand em{font-style:normal;}
+          .rep-index{font-family:var(--sans);font-size:10px;color:#222;}
+          .rep-title{font-family:var(--sans);font-size:12px;font-weight:700;letter-spacing:0.16em;text-transform:uppercase;margin-top:6px;color:#000;}
+          .rep-meta,.rep-filter{font-family:var(--sans);font-size:9.5px;color:#333;margin-top:2px;}
+          .rep-filter{font-weight:600;color:#111;}
+          .rep-summary{display:flex;flex-wrap:wrap;gap:18px;margin:10px 0;padding:8px 0;border-bottom:1px solid #999;}
+          .rep-stat{display:flex;flex-direction:column;font-family:var(--sans);}
+          .rep-stat-l{font-size:7.5px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:#666;}
+          .rep-stat-v{font-size:13px;font-weight:600;font-variant-numeric:tabular-nums;color:#000;}
+          .rep-capnote{font-family:var(--sans);font-size:8.5px;color:#666;margin-bottom:5px;}
+          .rep-capnote:empty{display:none;}
+          .rep-table{width:100%;border-collapse:collapse;font-family:var(--sans);}
+          .rep-table thead{display:table-header-group;}
+          .rep-table tfoot{display:table-footer-group;}
+          .rep-table th{font-size:7.5px;font-weight:700;letter-spacing:0.05em;text-transform:uppercase;color:#000;border-bottom:1.5px solid #000;padding:4px 5px;text-align:left;}
+          .rep-table th.rep-num{text-align:right;}
+          .rep-table td{font-size:9px;padding:2.5px 5px;border-bottom:0.5px solid #ccc;color:#111;}
+          .rep-table tr{break-inside:avoid;}
+          .rep-num{text-align:right;font-family:var(--mono);font-variant-numeric:tabular-nums;}
+          .rep-ref{font-family:var(--mono);font-weight:600;}
+          .rep-num.up{color:#186b43;}.rep-num.down{color:#8f2820;}.rep-num.flat{color:#666;}
+          .rep-foot{font-family:var(--sans);font-size:7.5px;color:#555;text-align:center;padding-top:6px;border-top:0.5px solid #999;}
+        }
+
         /* RESPONSIVE */
         @media(max-width:860px){
           .hero-grid{grid-template-columns:1fr;text-align:center;}
@@ -1477,6 +1593,8 @@ export default function Home() {
               <span className="pro-count-wrap"><b id="proCount">—</b> refs</span>
               <button className="pro-export" onClick={() => (window as any).exportProCSV()}>
                 <span dangerouslySetInnerHTML={{ __html: SVG.trending }} />Export CSV</button>
+              <button className="pro-export pro-pdf" onClick={() => (window as any).exportProPDF()}>
+                <span dangerouslySetInnerHTML={{ __html: SVG.market }} />Report PDF</button>
             </div>
           </div>
           <div className="trend-legend"><span className="tl-up">&#9650; green</span> = avg listed price rising &middot; <span className="tl-dn">&#9660; red</span> = falling &middot; <span className="tl-deal">&#9670; Deal</span> = cheapest listing below its 30-day usual</div>
@@ -1657,6 +1775,30 @@ export default function Home() {
           <button className="m-submit">Reserve my spot &rarr;</button>
           <p className="m-note">Free during our public beta. No credit card required.</p>
         </div>
+      </div>
+
+      {/* ── PRO MARKET REPORT (print-only; populated on "Report PDF") ── */}
+      <div id="proReport" className="pro-report" aria-hidden="true">
+        <div className="rep-head">
+          <div className="rep-brandrow">
+            <div className="rep-brand">Watch<em>Out</em></div>
+            <div className="rep-index" id="repIndex"></div>
+          </div>
+          <div className="rep-title">Market Report</div>
+          <div className="rep-meta">Generated <span id="repTime"></span></div>
+          <div className="rep-filter" id="repFilter"></div>
+        </div>
+        <div className="rep-summary" id="repSummary"></div>
+        <div className="rep-capnote" id="repCapNote"></div>
+        <table className="rep-table">
+          <thead><tr>
+            <th>Ref</th><th>Nickname</th><th>Brand</th><th className="rep-num">Avg price</th>
+            <th className="rep-num">24h &Delta;</th><th className="rep-num">7d &Delta;</th>
+            <th className="rep-num">Low / High</th><th className="rep-num">N</th><th>Signal</th>
+          </tr></thead>
+          <tbody id="repBody"></tbody>
+          <tfoot><tr><td colSpan={9}><div className="rep-foot">WatchOut &mdash; independent multi-source price intelligence &middot; data from live market listings &middot; not investment advice</div></td></tr></tfoot>
+        </table>
       </div>
     </>
   );
