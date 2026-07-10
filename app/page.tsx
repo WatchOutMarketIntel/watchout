@@ -41,7 +41,7 @@ export default function Home() {
       { brand: 'Rolex', name: 'Submariner Date', ref: '126610LN', price: 14250, change: 2.3, change7d: 2.6, img: '', count: 120, gender: 'men', material: 'Steel' },
       { brand: 'Patek Philippe', name: 'Nautilus', ref: '5711/1A-010', price: 51800, change: -1.1, change7d: -3.4, img: '', count: 40, gender: 'men', material: 'Steel' },
       { brand: 'Audemars Piguet', name: 'Royal Oak 41mm', ref: '15500ST', price: 36400, change: 0.8, change7d: 1.2, img: '', count: 35, gender: 'men', material: 'Steel' },
-      { brand: 'Rolex', name: 'Daytona', ref: '116500LN', price: 28900, change: -0.6, change7d: -3.8, img: '', count: 90, gender: 'men', material: 'Steel' },
+      { brand: 'Rolex', name: 'Daytona', ref: '116500LN', price: 28900, change: -0.6, change7d: -3.8, img: '', count: 90, gender: 'men', material: 'Steel', low: 26200, high: 34900, typicalLow: 28800, dealPct: -9.0 },
       { brand: 'Omega', name: 'Speedmaster Pro', ref: '310.30.42.50', price: 6100, change: 4.2, change7d: 2.4, img: '', count: 110, gender: 'men', material: 'Steel' },
       { brand: 'Tudor', name: 'Black Bay 58', ref: 'M79030N', price: 3800, change: 3.1, change7d: 0.9, img: '', count: 75, gender: 'unisex', material: 'Steel' },
       { brand: 'IWC', name: 'Pilot Chrono', ref: 'IW377709', price: 7200, change: 1.5, change7d: 0.2, img: '', count: 30, gender: 'men', material: 'Steel' },
@@ -57,9 +57,18 @@ export default function Home() {
       (c == null) ? '—' : (c >= 0 ? '▲ +' : '▼ ') + Math.abs(c).toFixed(1) + '%';
     const chgClass = (c: number | null | undefined) =>
       (c == null) ? 'flat' : (c >= 0 ? 'up' : 'down');
-    // Compact signed % for the dense Pro grid (no arrows): "+2.3" / "-3.4" / "—".
+    // Compact signed % for the dense Pro grid, WITH a direction arrow (never
+    // color-only — accessibility): "▲ +2.3" / "▼ −3.4" / "—".
     const fmtChgShort = (c: number | null | undefined) =>
-      (c == null) ? '—' : (c >= 0 ? '+' : '−') + Math.abs(c).toFixed(1);
+      (c == null) ? '—' : (c >= 0 ? '▲ +' : '▼ −') + Math.abs(c).toFixed(1);
+    // Tooltip copy for a trend cell/header over a given window.
+    const trendTip = (win: string) => `Change in average listed price over the last ${win}`;
+    // A "deal" = the cheapest live listing is ≥8% below THIS reference's own 30-day
+    // typical cheapest, with ≥3 listings (avoids thin-data false positives). The
+    // server sends deal_pct (signed % of low vs typical_low) + typical_low.
+    const isDeal = (w: any) => w.dealPct != null && w.dealPct <= -8 && (w.count ?? 0) >= 3;
+    const dealText = (w: any) =>
+      `Cheapest usually ~${fmt(w.typicalLow)} · now ${fmt(w.low)} (−${Math.abs(w.dealPct)}%)`;
 
     // Link a watch to its EXACT eBay listing (the one its photo came from). Falls
     // back to a durable category-scoped search only when we have no listing_url
@@ -229,20 +238,28 @@ export default function Home() {
       const tbody = document.getElementById('mktBody');
       if (!tbody) return;
       const data = filter === 'all' ? WATCHES : WATCHES.filter(w => w.brand === filter);
-      tbody.innerHTML = data.map((w, i) => `
-        <tr>
+      tbody.innerHTML = data.map((w, i) => {
+        const deal = isDeal(w);
+        const c7 = (w as any).change7d;
+        return `
+        <tr class="${deal ? 'mkt-row-deal' : ''}">
           <td class="mkt-rank">${i + 1}</td>
           <td>
             <a class="mkt-id" href="${watchUrl(w)}">
               <span class="mkt-photo">${photoInner(w, 'mkt-img', 'mkt-fb')}</span>
-              <span><span class="mkt-watch-name">${w.name}${nickBadge(w)}</span><span class="mkt-brand">${subMetaBrand(w)}</span></span>
+              <span><span class="mkt-watch-name">${w.name}${nickBadge(w)}${deal ? '<span class="mkt-deal-tag">Deal</span>' : ''}</span><span class="mkt-brand">${subMetaBrand(w)}</span></span>
             </a>
           </td>
           <td class="mkt-price">${fmt(w.price)}</td>
-          <td><div class="mkt-trend">${sparkline((w as any).spark)}<span class="${w.change == null ? 'badge-flat' : (w.change >= 0 ? 'badge-up' : 'badge-dn')}">${fmtChg(w.change)}</span></div></td>
+          <td title="${trendTip('7 days')}"><div class="mkt-trend">${sparkline((w as any).spark)}<span class="${c7 == null ? 'badge-flat' : (c7 >= 0 ? 'badge-up' : 'badge-dn')}">${fmtChg(c7)}</span></div></td>
           <td class="mkt-vol">${(w as any).count != null ? (w as any).count : '—'} listings</td>
           <td><button class="alert-btn" onclick="openModal()">+ Alert</button></td>
-        </tr>`).join('');
+        </tr>${deal ? `
+        <tr class="mkt-deal-sub">
+          <td></td>
+          <td colspan="5"><div class="mkt-deal-panel"><span class="mkt-deal-di">◆</span> ${dealText(w)} <a class="mkt-deal-go" href="${ebayUrl(w)}" target="_blank" rel="noopener noreferrer">View listing →</a></div></td>
+        </tr>` : ''}`;
+      }).join('');
       // Locked-rows teaser: when the free tier capped the payload, show how many
       // more references are behind the paywall (only on the unfiltered view).
       const locked = totalRefs - WATCHES.length;
@@ -332,6 +349,9 @@ export default function Home() {
           case 'lowhigh': return w.low == null ? -Infinity : w.low;
           case 'count': return w.count == null ? -1 : w.count;
           case 'signal': { const s = signalOf(w); return s === 'BUY' ? 0 : s === 'HOT' ? 1 : 2; }
+          // Deal: deepest discount first when ascending. Non-deals sort after deals
+          // (treated as 0% so they never lead the discount sort).
+          case 'deal': return isDeal(w) ? (w.dealPct as number) : 0;
           default: return 0;
         }
       };
@@ -344,10 +364,18 @@ export default function Home() {
       return rows;
     };
 
+    const sigTip = (s: string) => s === 'BUY'
+      ? 'Avg price down ≥3% over 7 days — potential entry point'
+      : s === 'HOT' ? 'Avg price up ≥2% over 7 days — rising demand' : '';
     const proBadge = (w: any) => {
       const s = signalOf(w);
-      return s ? `<span class="sig sig-${s.toLowerCase()}">${s}</span>` : '<span class="sig-none">·</span>';
+      return s ? `<span class="sig sig-${s.toLowerCase()}" title="${sigTip(s)}">${s}</span>` : '<span class="sig-none">·</span>';
     };
+    // Pro "Deal" cell: a discount badge when this ref meets the deal condition,
+    // else a dash. Title spells out the comparison.
+    const dealCell = (w: any) => isDeal(w)
+      ? `<span class="deal-badge" title="${dealText(w)}">◆ −${Math.abs(w.dealPct)}%</span>`
+      : '<span class="deal-none">—</span>';
     const genderCell = (w: any) => {
       if (!w.gender) return '<span class="g-none">—</span>';
       const est = w.genderSrc === 'size'
@@ -362,19 +390,20 @@ export default function Home() {
       const cEl = document.getElementById('proCount');
       if (cEl) cEl.textContent = rows.length.toLocaleString();
       tbody.innerHTML = rows.map((w: any) => `
-        <tr>
+        <tr class="${isDeal(w) ? 'p-row-deal' : ''}">
           <td class="p-ref"><a href="${watchUrl(w)}">${w.ref || '—'}</a></td>
           <td class="p-watch"><span class="p-brand">${w.brand}</span> ${w.name}${w.nickname ? `<span class="p-nick">${w.nickname}</span>` : ''}</td>
           <td>${genderCell(w)}</td>
           <td class="p-mat">${w.material || '—'}</td>
           <td class="p-num p-price">${fmt(w.price)}</td>
-          <td class="p-num ${chgClass(w.change)}">${fmtChgShort(w.change)}</td>
-          <td class="p-num ${chgClass(w.change7d)}">${fmtChgShort(w.change7d)}</td>
+          <td class="p-num ${chgClass(w.change)}" title="${trendTip('24 hours')}">${fmtChgShort(w.change)}</td>
+          <td class="p-num ${chgClass(w.change7d)}" title="${trendTip('7 days')}">${fmtChgShort(w.change7d)}</td>
           <td class="p-num p-lh">${w.low != null ? fmt(w.low) : '—'} <span class="p-sl">/</span> ${w.high != null ? fmt(w.high) : '—'}</td>
           <td class="p-num">${w.count != null ? w.count : '—'}</td>
+          <td class="p-deal">${dealCell(w)}</td>
           <td class="p-sig">${proBadge(w)}</td>
         </tr>`).join('')
-        || `<tr><td colspan="10" class="p-empty">No watches match these filters.</td></tr>`;
+        || `<tr><td colspan="11" class="p-empty">No watches match these filters.</td></tr>`;
       document.querySelectorAll('#proHead th[data-key]').forEach(th => {
         const active = th.getAttribute('data-key') === proState.sort;
         th.classList.toggle('sorted', active);
@@ -384,7 +413,7 @@ export default function Home() {
 
     (window as any).proSort = (key: string) => {
       if (proState.sort === key) proState.dir = proState.dir === 'asc' ? 'desc' : 'asc';
-      else { proState.sort = key; proState.dir = ['ref', 'name', 'gender', 'material'].includes(key) ? 'asc' : 'desc'; }
+      else { proState.sort = key; proState.dir = ['ref', 'name', 'gender', 'material', 'deal'].includes(key) ? 'asc' : 'desc'; }
       buildPro();
     };
     (window as any).proSearch = (v: string) => { proState.q = v; buildPro(); };
@@ -398,13 +427,14 @@ export default function Home() {
     (window as any).exportProCSV = () => {
       const rows = proFiltered();
       const head = ['Ref', 'Brand', 'Model', 'Nickname', 'Gender', 'GenderSource', 'Material',
-        'Price', '24h%', '7d%', 'Low', 'High', 'Listings', 'Signal'];
+        'Price', '24h%', '7d%', 'Low', 'High', 'Listings', 'TypicalLow', 'Deal%', 'Signal'];
       const esc = (v: any) => { const s = v == null ? '' : String(v); return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
       const lines = [head.join(',')];
       rows.forEach((w: any) => lines.push([w.ref, w.brand, w.name, w.nickname || '', w.gender || '',
         w.genderSrc || '', w.material || '', w.price, w.change == null ? '' : w.change,
         w.change7d == null ? '' : w.change7d, w.low == null ? '' : w.low, w.high == null ? '' : w.high,
-        w.count == null ? '' : w.count, signalOf(w)].map(esc).join(',')));
+        w.count == null ? '' : w.count, w.typicalLow == null ? '' : w.typicalLow,
+        isDeal(w) ? w.dealPct : '', signalOf(w)].map(esc).join(',')));
       const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
       const a = document.createElement('a');
       a.href = URL.createObjectURL(blob);
@@ -562,6 +592,9 @@ export default function Home() {
           gender: w.gender || '',            // men|women|unisex|'' (curated>eBay>size)
           genderSrc: w.gender_src || '',     // 'size' = estimated from case diameter
           signal: w.signal || '',            // BUY|HOT|'' from the 7d move
+          typical: w.typical_price == null ? null : Number(w.typical_price),   // 30d avg (display)
+          typicalLow: w.typical_low == null ? null : Number(w.typical_low),    // 30d avg of low (deal baseline)
+          dealPct: w.deal_pct == null ? null : Number(w.deal_pct),             // low vs typical_low (neg = discount)
         }));
         // Entitlements drive the locked states + ads slot; default to "unlocked"
         // so the placeholder path (API down) still shows everything.
@@ -700,7 +733,7 @@ export default function Home() {
         .movers-strip{overflow:hidden;position:relative;width:100%;
           -webkit-mask-image:linear-gradient(90deg,transparent,#000 5%,#000 95%,transparent);
           mask-image:linear-gradient(90deg,transparent,#000 5%,#000 95%,transparent);}
-        .mv-track{display:flex;gap:1rem;width:max-content;animation:mv-scroll 55s linear infinite;will-change:transform;}
+        .mv-track{display:flex;gap:1rem;width:max-content;animation:mv-scroll 46.75s linear infinite;will-change:transform;}
         .movers-strip:hover .mv-track{animation-play-state:paused;}
         @keyframes mv-scroll{from{transform:translateX(0)}to{transform:translateX(-50%)}}
         .mv-card{display:block;flex:0 0 auto;width:172px;background:var(--surface);border:1px solid var(--line);overflow:hidden;transition:border-color 0.15s;}
@@ -859,6 +892,25 @@ export default function Home() {
         .p-empty{text-align:center;color:var(--ink-3);padding:2.5rem 1rem !important;font-size:0.9rem;}
         .pro-note{margin-top:0.9rem;font-size:0.72rem;color:var(--ink-3);line-height:1.5;}
         .pro-note .g-est{color:var(--ink-2);}
+        /* Trend + deal legend (Comprehension Pack) */
+        .trend-legend{font-size:0.72rem;color:var(--ink-3);margin:0.75rem 0 0;letter-spacing:0.01em;}
+        .trend-legend .tl-up{color:var(--gain);font-weight:600;}
+        .trend-legend .tl-dn{color:var(--red);font-weight:600;}
+        .trend-legend .tl-deal{color:#8A6A1E;font-weight:600;}
+        /* Deal highlight — Pro grid */
+        .p-deal{text-align:right;}
+        .deal-badge{font-family:var(--mono);font-size:0.66rem;font-weight:700;color:#7A5A12;background:rgba(200,150,40,0.16);border:1px solid rgba(200,150,40,0.5);border-radius:3px;padding:0.12rem 0.4rem;white-space:nowrap;cursor:help;}
+        .deal-none{color:var(--ink-3);}
+        .p-row-deal td{box-shadow:inset 3px 0 0 rgba(200,150,40,0.8);}
+        /* Deal highlight — consumer market table */
+        .mkt-row-deal td{background:rgba(200,150,40,0.06);box-shadow:inset 3px 0 0 rgba(200,150,40,0.8);}
+        .mkt-deal-tag{display:inline-block;margin-left:0.5rem;font-size:0.56rem;font-weight:700;letter-spacing:0.09em;text-transform:uppercase;color:#7A5A12;background:rgba(200,150,40,0.18);border:1px solid rgba(200,150,40,0.55);border-radius:999px;padding:0.07rem 0.42rem;vertical-align:middle;}
+        .mkt-deal-sub td{padding:0 !important;background:rgba(200,150,40,0.06);border-bottom:1px solid var(--line);}
+        .mkt-deal-sub:hover td{background:rgba(200,150,40,0.06);}
+        .mkt-deal-panel{display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap;padding:0.15rem 1rem 0.6rem;font-size:0.82rem;color:var(--ink-2);}
+        .mkt-deal-di{color:#8A6A1E;font-weight:700;}
+        .mkt-deal-go{font-weight:600;color:var(--red);border-bottom:1px solid var(--red);white-space:nowrap;}
+        .mkt-deal-go:hover{color:var(--ink);border-bottom-color:var(--ink);}
 
         /* WATCHLISTS */
         .wl-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(340px,100%),1fr));gap:1.2rem;}
@@ -1197,6 +1249,7 @@ export default function Home() {
                 <span dangerouslySetInnerHTML={{ __html: SVG.trending }} />Export CSV</button>
             </div>
           </div>
+          <div className="trend-legend"><span className="tl-up">&#9650; green</span> = avg listed price rising &middot; <span className="tl-dn">&#9660; red</span> = falling &middot; <span className="tl-deal">&#9670; Deal</span> = cheapest listing below its 30-day usual</div>
           <div className="pro-tablewrap">
             <table className="pro-table">
               <thead id="proHead"><tr>
@@ -1205,10 +1258,11 @@ export default function Home() {
                 <th data-key="gender" onClick={() => (window as any).proSort('gender')}>Gender</th>
                 <th data-key="material" onClick={() => (window as any).proSort('material')}>Material</th>
                 <th data-key="price" className="th-num" onClick={() => (window as any).proSort('price')}>Price</th>
-                <th data-key="change" className="th-num" onClick={() => (window as any).proSort('change')}>24h</th>
-                <th data-key="change7d" className="th-num" onClick={() => (window as any).proSort('change7d')}>7d</th>
+                <th data-key="change" className="th-num" title="Change in average listed price over the last 24 hours" onClick={() => (window as any).proSort('change')}>24h &Delta;</th>
+                <th data-key="change7d" className="th-num" title="Change in average listed price over the last 7 days" onClick={() => (window as any).proSort('change7d')}>7d &Delta;</th>
                 <th data-key="lowhigh" className="th-num" onClick={() => (window as any).proSort('lowhigh')}>Low / High</th>
                 <th data-key="count" className="th-num" onClick={() => (window as any).proSort('count')}>N</th>
+                <th data-key="deal" className="th-num" title="Cheapest live listing vs this reference's 30-day typical cheapest — deeper discount = better deal" onClick={() => (window as any).proSort('deal')}>Deal</th>
                 <th data-key="signal" onClick={() => (window as any).proSort('signal')}>Signal</th>
               </tr></thead>
               <tbody id="proBody"></tbody>
@@ -1228,8 +1282,9 @@ export default function Home() {
             ))}
           </div>
           <div style={{ overflowX: 'auto' }}>
-            <table className="mkt-table"><thead><tr><th>#</th><th>Watch</th><th>Price</th><th>7-day</th><th>Volume</th><th>Alert</th></tr></thead><tbody id="mktBody"></tbody></table>
+            <table className="mkt-table"><thead><tr><th>#</th><th>Watch</th><th>Price</th><th title="Change in average listed price over the last 7 days">7-day &Delta;</th><th>Volume</th><th>Alert</th></tr></thead><tbody id="mktBody"></tbody></table>
           </div>
+          <div className="trend-legend"><span className="tl-up">&#9650; green</span> = avg listed price rising &middot; <span className="tl-dn">&#9660; red</span> = falling &middot; <span className="tl-deal">&#9670; Deal</span> = cheapest listing below its 30-day usual</div>
         </div>
       </div>
 

@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import { nickOf } from '../../nicknames';
 
@@ -13,24 +13,91 @@ const chgCls = (c?: number | null) => (c == null ? 'flat' : c >= 0 ? 'up' : 'dow
 const ebaySearch = (brand: string, name: string, ref: string) =>
   `https://www.ebay.com/sch/i.html?_nkw=${encodeURIComponent([brand, name, ref].filter(Boolean).join(' '))}&_sacat=31387`;
 
-// A larger price chart (line + soft fill) from the history series.
-function chart(history: { price: number; at: string }[]) {
-  if (!history || history.length < 2) return '<div class="dt-nochart">Not enough history yet — the chart fills in as snapshots accumulate.</div>';
-  const W = 760, H = 220, pad = 10;
+type Pt = { price: number; at: string; n?: number | null };
+const abbr$ = (v: number) => {
+  const a = Math.abs(v);
+  // Below $100k, keep one decimal so tight-range gridlines stay distinguishable
+  // ($33.5k vs $34k); above, whole-k is enough.
+  if (a >= 1000) return '$' + (v / 1000).toFixed(a >= 100000 ? 0 : 1).replace(/\.0$/, '') + 'k';
+  return '$' + Math.round(v).toLocaleString();
+};
+const dayMs = 86400000;
+
+// Interactive price-history chart: dated X axis, $-labelled Y axis (not forced to
+// zero — a ~10% band around min/max), gridlines, and a hover tooltip (date, avg
+// price, listing count). Thin history (<5 points) shows a "collecting" message
+// rather than a misleading line.
+function PriceChart({ history }: { history: Pt[] }) {
+  const [hover, setHover] = useState<number | null>(null);
+  if (!history || history.length < 5) {
+    return <div className="dt-nochart">Collecting history — chart improves daily. ({history?.length || 0} snapshot{(history?.length || 0) === 1 ? '' : 's'} so far.)</div>;
+  }
+  const W = 820, H = 300, padL = 54, padR = 16, padT = 16, padB = 30;
+  const plotW = W - padL - padR, plotH = H - padT - padB;
   const prices = history.map(h => h.price);
-  const min = Math.min(...prices), max = Math.max(...prices);
-  const span = max - min || 1;
+  const dates = history.map(h => new Date(h.at));
   const n = prices.length;
-  const x = (i: number) => pad + (i / (n - 1)) * (W - pad * 2);
-  const y = (p: number) => pad + (1 - (p - min) / span) * (H - pad * 2);
+  const dmin = Math.min(...prices), dmax = Math.max(...prices);
+  const rawSpan = dmax - dmin;
+  const pad = rawSpan > 0 ? rawSpan * 0.1 : Math.max(dmax * 0.05, 1);   // ~10% band, never zero-height
+  const yMin = dmin - pad, yMax = dmax + pad, ySpan = yMax - yMin;
+  const x = (i: number) => padL + (i / (n - 1)) * plotW;
+  const y = (p: number) => padT + (1 - (p - yMin) / ySpan) * plotH;
+
+  const spanDays = (dates[n - 1].getTime() - dates[0].getTime()) / dayMs;
+  const fmtAxisDate = (d: Date) => {
+    const mon = d.toLocaleString('en-US', { month: 'short' });
+    if (spanDays > 90) return `${mon} '${String(d.getFullYear()).slice(2)}`;   // monthly scale
+    return `${mon} ${d.getDate()}`;                                            // day/weekly scale
+  };
+  const fmtFullDate = (d: Date) =>
+    d.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+
+  const yTicks = 4;
+  const ys = Array.from({ length: yTicks + 1 }, (_, k) => yMin + (ySpan * k) / yTicks);
+  const xTickCount = Math.min(6, n);
+  const xs = Array.from({ length: xTickCount }, (_, k) => Math.round((k / (xTickCount - 1)) * (n - 1)));
+
   const line = prices.map((p, i) => `${x(i).toFixed(1)},${y(p).toFixed(1)}`).join(' ');
-  const area = `${pad},${(H - pad).toFixed(1)} ${line} ${(W - pad).toFixed(1)},${(H - pad).toFixed(1)}`;
+  const area = `${padL},${(padT + plotH).toFixed(1)} ${line} ${(padL + plotW).toFixed(1)},${(padT + plotH).toFixed(1)}`;
   const up = prices[n - 1] >= prices[0];
   const col = up ? '#3E7D5A' : '#A8362B';
-  return `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" class="dt-chart" role="img" aria-label="Price history">`
-    + `<polygon points="${area}" fill="${col}" opacity="0.07"/>`
-    + `<polyline points="${line}" fill="none" stroke="${col}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>`
-    + `<circle cx="${x(n - 1).toFixed(1)}" cy="${y(prices[n - 1]).toFixed(1)}" r="3.2" fill="${col}"/></svg>`;
+
+  const onMove = (e: React.MouseEvent<SVGSVGElement>) => {
+    const r = e.currentTarget.getBoundingClientRect();
+    const vbx = ((e.clientX - r.left) / r.width) * W;
+    const frac = Math.max(0, Math.min(1, (vbx - padL) / plotW));
+    setHover(Math.round(frac * (n - 1)));
+  };
+  const hi = hover == null ? null : history[hover];
+
+  return (
+    <div className="dt-chartwrap">
+      <svg viewBox={`0 0 ${W} ${H}`} className="dt-chart" role="img" aria-label="Price history"
+        onMouseMove={onMove} onMouseLeave={() => setHover(null)}>
+        {ys.map((v, k) => (
+          <g key={k}>
+            <line x1={padL} y1={y(v)} x2={padL + plotW} y2={y(v)} stroke="#E6DCC6" strokeWidth="1" />
+            <text x={padL - 8} y={y(v) + 3.5} textAnchor="end" className="dt-axl">{abbr$(v)}</text>
+          </g>
+        ))}
+        {xs.map((i, k) => (
+          <text key={k} x={x(i)} y={H - 10} textAnchor={k === 0 ? 'start' : k === xs.length - 1 ? 'end' : 'middle'} className="dt-axl">{fmtAxisDate(dates[i])}</text>
+        ))}
+        <polygon points={area} fill={col} opacity="0.07" />
+        <polyline points={line} fill="none" stroke={col} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+        {hi && <line x1={x(hover as number)} y1={padT} x2={x(hover as number)} y2={padT + plotH} stroke="#A89E8B" strokeWidth="1" strokeDasharray="3 3" />}
+        <circle cx={x(n - 1)} cy={y(prices[n - 1])} r="3.2" fill={col} />
+        {hi && <circle cx={x(hover as number)} cy={y(hi.price)} r="4" fill={col} stroke="#FBF6EA" strokeWidth="1.5" />}
+      </svg>
+      {hi && (
+        <div className="dt-tip" style={{ left: `${(x(hover as number) / W) * 100}%` }}>
+          <div className="dt-tip-d">{fmtFullDate(dates[hover as number])}</div>
+          <div className="dt-tip-p">{fmt(hi.price)}{hi.n != null && <span className="dt-tip-n"> · {hi.n} listings</span>}</div>
+        </div>
+      )}
+    </div>
+  );
 }
 
 export default function WatchDetail() {
@@ -90,7 +157,13 @@ export default function WatchDetail() {
         .sec{margin-top:2.6rem;}
         .sec-h{font-family:var(--serif);font-size:1.3rem;font-weight:500;margin-bottom:0.4rem;}
         .sec-sub{font-size:0.78rem;color:var(--ink-3);margin-bottom:1rem;}
-        .dt-chart{width:100%;height:auto;display:block;border:1px solid var(--line);background:var(--surface);}
+        .dt-chartwrap{position:relative;}
+        .dt-chart{width:100%;height:auto;display:block;border:1px solid var(--line);background:var(--surface);cursor:crosshair;}
+        .dt-axl{font-family:var(--sans);font-size:10px;fill:var(--ink-3);}
+        .dt-tip{position:absolute;top:8px;transform:translateX(-50%);background:var(--ink);color:var(--paper);padding:0.4rem 0.6rem;border-radius:4px;font-size:0.74rem;pointer-events:none;white-space:nowrap;box-shadow:0 2px 8px rgba(0,0,0,0.18);z-index:2;}
+        .dt-tip-d{font-size:0.66rem;opacity:0.75;margin-bottom:0.1rem;}
+        .dt-tip-p{font-weight:600;font-variant-numeric:tabular-nums;}
+        .dt-tip-n{font-weight:400;opacity:0.8;}
         .dt-nochart{font-size:0.85rem;color:var(--ink-3);padding:1.4rem;border:1px dashed var(--ink-3);}
         .listings{display:flex;flex-direction:column;border:1px solid var(--line);}
         .lrow{display:grid;grid-template-columns:1fr auto auto;gap:1rem;align-items:center;padding:0.8rem 1rem;border-bottom:1px solid var(--line);transition:background 0.15s;}
@@ -153,7 +226,7 @@ export default function WatchDetail() {
                   ? <>Showing the last 24 hours. <a className="hist-cta" href="/?tier=personal">Unlock 7-day, 30-day &amp; full history with Personal →</a></>
                   : <>Average active-listing price, most recent snapshots.</>}
               </p>
-              <div dangerouslySetInnerHTML={{ __html: chart(data.history || []) }} />
+              <PriceChart history={data.history || []} />
             </div>
 
             <div className="sec">
