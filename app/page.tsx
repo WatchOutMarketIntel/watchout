@@ -38,7 +38,7 @@ export default function Home() {
   useEffect(() => {
     // ── WATCH DATA (placeholder; replaced by live data from the API below) ──
     const PLACEHOLDER = [
-      { brand: 'Rolex', name: 'Submariner Date', ref: '126610LN', price: 14250, change: 2.3, change7d: 2.6, img: '', count: 120, gender: 'men', material: 'Steel' },
+      { brand: 'Rolex', name: 'Submariner Date', ref: '126610LN', price: 14250, change: 2.3, change7d: 2.6, img: '', count: 120, gender: 'men', material: 'Steel', relYear: 2020 },
       { brand: 'Patek Philippe', name: 'Nautilus', ref: '5711/1A-010', price: 51800, change: -1.1, change7d: -3.4, img: '', count: 40, gender: 'men', material: 'Steel' },
       { brand: 'Audemars Piguet', name: 'Royal Oak 41mm', ref: '15500ST', price: 36400, change: 0.8, change7d: 1.2, img: '', count: 35, gender: 'men', material: 'Steel' },
       { brand: 'Rolex', name: 'Daytona', ref: '116500LN', price: 28900, change: -0.6, change7d: -3.8, img: '', count: 90, gender: 'men', material: 'Steel', low: 26200, high: 34900, typicalLow: 28800, dealPct: -9.0 },
@@ -343,6 +343,7 @@ export default function Home() {
           case 'name': return (w.brand + ' ' + w.name).toLowerCase();
           case 'gender': return w.gender || 'zzz';
           case 'material': return (w.material || 'zzz').toLowerCase();
+          case 'relyear': return w.relYear == null ? -Infinity : w.relYear;
           case 'price': return w.price || 0;
           case 'change': return w.change == null ? -Infinity : w.change;
           case 'change7d': return w.change7d == null ? -Infinity : w.change7d;
@@ -395,6 +396,7 @@ export default function Home() {
           <td class="p-watch"><span class="p-brand">${w.brand}</span> ${w.name}${w.nickname ? `<span class="p-nick">${w.nickname}</span>` : ''}</td>
           <td>${genderCell(w)}</td>
           <td class="p-mat">${w.material || '—'}</td>
+          <td class="p-num p-relyr">${w.relYear != null ? w.relYear : '—'}</td>
           <td class="p-num p-price">${fmt(w.price)}</td>
           <td class="p-num ${chgClass(w.change)}" title="${trendTip('24 hours')}">${fmtChgShort(w.change)}</td>
           <td class="p-num ${chgClass(w.change7d)}" title="${trendTip('7 days')}">${fmtChgShort(w.change7d)}</td>
@@ -403,7 +405,7 @@ export default function Home() {
           <td class="p-deal">${dealCell(w)}</td>
           <td class="p-sig">${proBadge(w)}</td>
         </tr>`).join('')
-        || `<tr><td colspan="11" class="p-empty">No watches match these filters.</td></tr>`;
+        || `<tr><td colspan="12" class="p-empty">No watches match these filters.</td></tr>`;
       document.querySelectorAll('#proHead th[data-key]').forEach(th => {
         const active = th.getAttribute('data-key') === proState.sort;
         th.classList.toggle('sorted', active);
@@ -426,12 +428,12 @@ export default function Home() {
     // CSV export of the CURRENT filtered + sorted view.
     (window as any).exportProCSV = () => {
       const rows = proFiltered();
-      const head = ['Ref', 'Brand', 'Model', 'Nickname', 'Gender', 'GenderSource', 'Material',
+      const head = ['Ref', 'Brand', 'Model', 'Nickname', 'Gender', 'GenderSource', 'Material', 'RelYear',
         'Price', '24h%', '7d%', 'Low', 'High', 'Listings', 'TypicalLow', 'Deal%', 'Signal'];
       const esc = (v: any) => { const s = v == null ? '' : String(v); return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
       const lines = [head.join(',')];
       rows.forEach((w: any) => lines.push([w.ref, w.brand, w.name, w.nickname || '', w.gender || '',
-        w.genderSrc || '', w.material || '', w.price, w.change == null ? '' : w.change,
+        w.genderSrc || '', w.material || '', w.relYear == null ? '' : w.relYear, w.price, w.change == null ? '' : w.change,
         w.change7d == null ? '' : w.change7d, w.low == null ? '' : w.low, w.high == null ? '' : w.high,
         w.count == null ? '' : w.count, w.typicalLow == null ? '' : w.typicalLow,
         isDeal(w) ? w.dealPct : '', signalOf(w)].map(esc).join(',')));
@@ -595,6 +597,7 @@ export default function Home() {
           typical: w.typical_price == null ? null : Number(w.typical_price),   // 30d avg (display)
           typicalLow: w.typical_low == null ? null : Number(w.typical_low),    // 30d avg of low (deal baseline)
           dealPct: w.deal_pct == null ? null : Number(w.deal_pct),             // low vs typical_low (neg = discount)
+          relYear: w.release_year == null ? null : Number(w.release_year),     // curated model release year
         }));
         // Entitlements drive the locked states + ads slot; default to "unlocked"
         // so the placeholder path (API down) still shows everything.
@@ -892,11 +895,12 @@ export default function Home() {
         .p-empty{text-align:center;color:var(--ink-3);padding:2.5rem 1rem !important;font-size:0.9rem;}
         .pro-note{margin-top:0.9rem;font-size:0.72rem;color:var(--ink-3);line-height:1.5;}
         .pro-note .g-est{color:var(--ink-2);}
-        /* Trend + deal legend (Comprehension Pack) */
-        .trend-legend{font-size:0.72rem;color:var(--ink-3);margin:0.75rem 0 0;letter-spacing:0.01em;}
-        .trend-legend .tl-up{color:var(--gain);font-weight:600;}
-        .trend-legend .tl-dn{color:var(--red);font-weight:600;}
-        .trend-legend .tl-deal{color:#8A6A1E;font-weight:600;}
+        /* Trend + deal legend (Comprehension Pack) — a legible bordered chip, not
+           faint body text, so it clearly reads as a legend on both views. */
+        .trend-legend{display:inline-block;font-size:0.78rem;color:var(--ink-2);margin:0.85rem 0 0.2rem;padding:0.42rem 0.8rem;background:var(--surface);border:1px solid var(--line);border-left:3px solid var(--ink);border-radius:3px;letter-spacing:0.01em;line-height:1.5;}
+        .trend-legend .tl-up{color:var(--gain);font-weight:700;}
+        .trend-legend .tl-dn{color:var(--red);font-weight:700;}
+        .trend-legend .tl-deal{color:#8A6A1E;font-weight:700;}
         /* Deal highlight — Pro grid */
         .p-deal{text-align:right;}
         .deal-badge{font-family:var(--mono);font-size:0.66rem;font-weight:700;color:#7A5A12;background:rgba(200,150,40,0.16);border:1px solid rgba(200,150,40,0.5);border-radius:3px;padding:0.12rem 0.4rem;white-space:nowrap;cursor:help;}
@@ -1257,6 +1261,7 @@ export default function Home() {
                 <th data-key="name" onClick={() => (window as any).proSort('name')}>Watch</th>
                 <th data-key="gender" onClick={() => (window as any).proSort('gender')}>Gender</th>
                 <th data-key="material" onClick={() => (window as any).proSort('material')}>Material</th>
+                <th data-key="relyear" className="th-num" title="Model release year (curated per reference) — dash if unknown" onClick={() => (window as any).proSort('relyear')}>Rel. Yr</th>
                 <th data-key="price" className="th-num" onClick={() => (window as any).proSort('price')}>Price</th>
                 <th data-key="change" className="th-num" title="Change in average listed price over the last 24 hours" onClick={() => (window as any).proSort('change')}>24h &Delta;</th>
                 <th data-key="change7d" className="th-num" title="Change in average listed price over the last 7 days" onClick={() => (window as any).proSort('change7d')}>7d &Delta;</th>

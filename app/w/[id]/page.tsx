@@ -142,7 +142,8 @@ export default function WatchDetail() {
         .brand{font-size:0.72rem;font-weight:600;letter-spacing:0.18em;text-transform:uppercase;color:var(--red);margin-bottom:0.35rem;}
         .name{font-family:var(--serif);font-size:clamp(1.8rem,4vw,2.6rem);font-weight:500;line-height:1.05;}
         .nick{display:inline-block;margin-left:0.6rem;font-size:0.66rem;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;color:var(--red);background:rgba(168,54,43,0.08);border:1px solid rgba(168,54,43,0.25);border-radius:999px;padding:0.12rem 0.5rem;vertical-align:middle;}
-        .ref{font-size:0.85rem;color:var(--ink-3);margin:0.35rem 0 1.2rem;}
+        .ref{font-size:0.85rem;color:var(--ink-3);margin:0.35rem 0 0.3rem;}
+        .rel-year{font-size:0.82rem;font-weight:500;color:var(--ink-2);margin:0 0 1.2rem;}
         .price{font-family:var(--serif);font-size:2.4rem;font-weight:600;line-height:1;}
         .chips{display:flex;gap:0.5rem;flex-wrap:wrap;margin:1rem 0 1.3rem;}
         .chip{border:1px solid var(--line);background:var(--surface);padding:0.4rem 0.7rem;font-size:0.8rem;}
@@ -196,7 +197,17 @@ export default function WatchDetail() {
               <div>
                 <div className="brand">{w.brand}</div>
                 <div className="name">{w.name}{nick && <span className="nick">{nick}</span>}</div>
-                <div className="ref">{[w.ref ? `Ref. ${w.ref}` : null, w.year, w.material].filter(Boolean).join('  ·  ') || 'Reference —'}</div>
+                <div className="ref">{[w.ref ? `Ref. ${w.ref}` : null, w.material].filter(Boolean).join('  ·  ') || 'Reference —'}</div>
+                {(() => {
+                  // Model release year (curated, per reference) vs. this example's own
+                  // production year (spotty eBay aspect). Null → the line just omits.
+                  const rl = w.release_year
+                    ? (w.example_year && String(w.example_year) !== String(w.release_year)
+                        ? `Model released ${w.release_year} · this example ${w.example_year}`
+                        : `Released ${w.release_year}`)
+                    : (w.year || '');
+                  return rl ? <div className="rel-year">{rl}</div> : null;
+                })()}
                 <div className="price">{fmt(w.price)}</div>
                 <div className="chips">
                   <div className="chip"><b>24h</b><span className={chgCls(w.change)}>{fmtChg(w.change)}</span></div>
