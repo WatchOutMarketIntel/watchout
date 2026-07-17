@@ -252,10 +252,13 @@ export default function Home() {
     }
 
     // ── MARKET TABLE (Market tab) ──
+    const MKT_RENDER_CAP = 1500;   // consumer explorer stays light (photos + deal sub-rows); the Pro terminal shows the full catalog virtualized
     const buildMarket = (filter: string) => {
       const tbody = document.getElementById('mktBody');
       if (!tbody) return;
-      const data = filter === 'all' ? WATCHES : WATCHES.filter(w => w.brand === filter);
+      const all = filter === 'all' ? WATCHES : WATCHES.filter(w => w.brand === filter);
+      const truncated = all.length > MKT_RENDER_CAP;
+      const data = truncated ? all.slice(0, MKT_RENDER_CAP) : all;
       tbody.innerHTML = data.map((w, i) => {
         const deal = isDeal(w);
         const c7 = (w as any).change7d;
@@ -278,6 +281,10 @@ export default function Home() {
           <td colspan="5"><div class="mkt-deal-panel"><span class="mkt-deal-di">◆</span> ${dealText(w)} <a class="mkt-deal-go" href="${ebayUrl(w)}" target="_blank" rel="noopener noreferrer">View listing →</a></div></td>
         </tr>` : ''}`;
       }).join('');
+      // When the explorer is capped, point power users to the full Pro terminal.
+      if (truncated) {
+        tbody.innerHTML += `<tr class="mkt-more-row"><td colspan="6"><div class="mkt-more">Showing the top ${MKT_RENDER_CAP.toLocaleString()} most-liquid of ${all.length.toLocaleString()} references &mdash; <a href="#" onclick="switchTab('pro');return false;">open the Pro terminal</a> for the full catalog.</div></td></tr>`;
+      }
       // Locked-rows teaser: when the free tier capped the payload, show how many
       // more references are behind the paywall (only on the unfiltered view).
       const locked = totalRefs - WATCHES.length;
@@ -402,13 +409,14 @@ export default function Home() {
       return `<span class="g-tag g-${w.gender}">${genderLabel(w.gender)}</span>${est}`;
     };
 
-    const buildPro = () => {
-      const tbody = document.getElementById('proBody');
-      if (!tbody) return;
-      const rows = proFiltered();
-      const cEl = document.getElementById('proCount');
-      if (cEl) cEl.textContent = rows.length.toLocaleString();
-      tbody.innerHTML = rows.map((w: any) => `
+    // ── Virtualized Pro grid ──────────────────────────────────────────────
+    // Only the visible row window is painted (+ top/bottom spacer rows sized to
+    // preserve the scrollbar), so the full de-duped catalog (~3.4k rows, headroom
+    // to 5k) scrolls smoothly. Search/sort/filter still run over the WHOLE set.
+    let proRows: any[] = [];
+    let PRO_ROW_H = 33;   // px; corrected from a real painted row on first render
+    let proRaf = 0;
+    const proRowHtml = (w: any) => `
         <tr class="${isDeal(w) ? 'p-row-deal' : ''}">
           <td class="p-ref"><a href="${watchUrl(w)}">${w.ref || '—'}</a></td>
           <td class="p-watch"><span class="p-brand">${w.brand}</span> ${w.name}${w.nickname ? `<span class="p-nick">${w.nickname}</span>` : ''}</td>
@@ -422,14 +430,51 @@ export default function Home() {
           <td class="p-num">${w.count != null ? w.count : '—'}</td>
           <td class="p-deal">${dealCell(w)}</td>
           <td class="p-sig">${proBadge(w)}</td>
-        </tr>`).join('')
-        || `<tr><td colspan="12" class="p-empty">No watches match these filters.</td></tr>`;
+        </tr>`;
+    const renderProWindow = (remeasured = false) => {
+      const tbody = document.getElementById('proBody');
+      if (!tbody) return;
+      const total = proRows.length;
+      if (!total) { tbody.innerHTML = `<tr><td colspan="12" class="p-empty">No watches match these filters.</td></tr>`; return; }
+      const vp = document.getElementById('proTableWrap');
+      const BUF = 6;
+      const scrollTop = vp ? vp.scrollTop : 0;
+      const vpH = (vp && vp.clientHeight) || 640;
+      const start = Math.max(0, Math.floor(scrollTop / PRO_ROW_H) - BUF);
+      const end = Math.min(total, start + Math.ceil(vpH / PRO_ROW_H) + BUF * 2);
+      const topPad = start * PRO_ROW_H, botPad = Math.max(0, (total - end) * PRO_ROW_H);
+      tbody.innerHTML =
+        (topPad > 0 ? `<tr class="p-vpad" style="height:${topPad}px"><td colspan="12"></td></tr>` : '')
+        + proRows.slice(start, end).map(proRowHtml).join('')
+        + (botPad > 0 ? `<tr class="p-vpad" style="height:${botPad}px"><td colspan="12"></td></tr>` : '');
+      if (!remeasured) {   // correct the assumed row height from a real row, once
+        const sample = tbody.querySelector('tr:not(.p-vpad)') as HTMLElement | null;
+        if (sample && sample.offsetHeight && Math.abs(sample.offsetHeight - PRO_ROW_H) > 1) {
+          PRO_ROW_H = sample.offsetHeight; renderProWindow(true);
+        }
+      }
+    };
+    const buildPro = () => {
+      proRows = proFiltered();
+      const cEl = document.getElementById('proCount');
+      if (cEl) cEl.textContent = proRows.length.toLocaleString();
       document.querySelectorAll('#proHead th[data-key]').forEach(th => {
         const active = th.getAttribute('data-key') === proState.sort;
         th.classList.toggle('sorted', active);
         th.setAttribute('data-dir', active ? proState.dir : '');
       });
+      const vp = document.getElementById('proTableWrap');
+      if (vp) vp.scrollTop = 0;   // a filter/sort change jumps back to the top
+      renderProWindow();
     };
+    // Re-paint the visible window on scroll (rAF-throttled); wired once.
+    setTimeout(() => {
+      const vp = document.getElementById('proTableWrap');
+      if (vp && !(vp as any)._vwired) {
+        (vp as any)._vwired = true;
+        vp.addEventListener('scroll', () => { if (!proRaf) proRaf = requestAnimationFrame(() => { proRaf = 0; renderProWindow(); }); });
+      }
+    }, 0);
 
     (window as any).proSort = (key: string) => {
       if (proState.sort === key) proState.dir = proState.dir === 'asc' ? 'desc' : 'asc';
@@ -815,7 +860,7 @@ export default function Home() {
     const previewTier = new URLSearchParams(window.location.search).get('tier');
     const tq = (sep: string) => (previewTier ? `${sep}tier=${encodeURIComponent(previewTier)}` : '');
     Promise.all([
-      fetch(`${API}/market${tq('?')}`).then(r => (r.ok ? r.json() : Promise.reject(r.status))),
+      fetch(`${API}/market?limit=5000${tq('&')}`).then(r => (r.ok ? r.json() : Promise.reject(r.status))),
       fetch(`${API}/market/history?points=24${tq('&')}`).then(r => (r.ok ? r.json() : { history: [] })).catch(() => ({ history: [] })),
     ])
       .then(([d, h]: any[]) => {
@@ -842,7 +887,6 @@ export default function Home() {
           gender: w.gender || '',            // men|women|unisex|'' (curated>eBay>size)
           genderSrc: w.gender_src || '',     // 'size' = estimated from case diameter
           signal: w.signal || '',            // BUY|HOT|'' from the 7d move
-          typical: w.typical_price == null ? null : Number(w.typical_price),   // 30d avg (display)
           typicalLow: w.typical_low == null ? null : Number(w.typical_low),    // 30d avg of low (deal baseline)
           dealPct: w.deal_pct == null ? null : Number(w.deal_pct),             // low vs typical_low (neg = discount)
           relYear: w.release_year == null ? null : Number(w.release_year),     // curated model release year
@@ -1110,9 +1154,12 @@ export default function Home() {
         .pro-export{display:flex;align-items:center;gap:0.4rem;font-size:0.78rem;font-weight:600;color:var(--paper);background:var(--ink);border:none;padding:0.5rem 0.9rem;cursor:pointer;transition:background 0.15s;white-space:nowrap;}
         .pro-export:hover{background:var(--red);}
         .pro-export svg{width:13px;height:13px;}
-        .pro-tablewrap{overflow-x:auto;border:1px solid var(--line);}
+        /* Fixed-height scroll viewport so the virtualized Pro grid keeps its own
+           scroll (Excel-like) and only paints the visible row window. */
+        .pro-tablewrap{overflow:auto;border:1px solid var(--line);max-height:calc(100vh - 250px);}
+        .p-vpad td{padding:0 !important;border:none !important;}   /* virtualization spacers */
         .pro-table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums;}
-        .pro-table thead th{position:sticky;top:60px;z-index:2;background:var(--paper);font-size:0.62rem;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:var(--ink-2);padding:0.6rem 0.75rem;text-align:left;white-space:nowrap;cursor:pointer;user-select:none;border-bottom:1.5px solid var(--ink);transition:color 0.12s;}
+        .pro-table thead th{position:sticky;top:0;z-index:2;background:var(--paper);font-size:0.62rem;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:var(--ink-2);padding:0.6rem 0.75rem;text-align:left;white-space:nowrap;cursor:pointer;user-select:none;border-bottom:1.5px solid var(--ink);transition:color 0.12s;}
         .pro-table thead th.th-num{text-align:right;}
         .pro-table thead th:hover{color:var(--red);}
         .pro-table thead th.sorted{color:var(--red);}
@@ -1164,6 +1211,9 @@ export default function Home() {
         .mkt-deal-di{color:#8A6A1E;font-weight:700;}
         .mkt-deal-go{font-weight:600;color:var(--red);border-bottom:1px solid var(--red);white-space:nowrap;}
         .mkt-deal-go:hover{color:var(--ink);border-bottom-color:var(--ink);}
+        .mkt-more-row td{padding:0 !important;}
+        .mkt-more{padding:0.9rem 1rem;font-size:0.82rem;color:var(--ink-2);background:var(--surface);border-top:1px solid var(--line);}
+        .mkt-more a{color:var(--red);font-weight:600;border-bottom:1px solid var(--red);}
 
         /* MY COLLECTION */
         .coll-stats{display:flex;gap:clamp(1.2rem,5vw,3rem);flex-wrap:wrap;padding:0.4rem 0 0.9rem;border-bottom:1px solid var(--line);margin-bottom:0.9rem;}
@@ -1598,7 +1648,7 @@ export default function Home() {
             </div>
           </div>
           <div className="trend-legend"><span className="tl-up">&#9650; green</span> = avg listed price rising &middot; <span className="tl-dn">&#9660; red</span> = falling &middot; <span className="tl-deal">&#9670; Deal</span> = cheapest listing below its 30-day usual</div>
-          <div className="pro-tablewrap">
+          <div className="pro-tablewrap" id="proTableWrap">
             <table className="pro-table">
               <thead id="proHead"><tr>
                 <th data-key="ref" onClick={() => (window as any).proSort('ref')}>Ref</th>
