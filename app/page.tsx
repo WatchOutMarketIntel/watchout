@@ -853,6 +853,11 @@ export default function Home() {
 
     // ── LOAD LIVE DATA ──
     const API = (process.env.NEXT_PUBLIC_API_URL || 'https://watchout-api-production.up.railway.app').replace(/\/+$/, '');
+    // Ask for the whole de-duped catalog in one payload. MUST stay >= the API's
+    // MARKET_MAX_LIMIT (12000), otherwise new references silently stop appearing
+    // once the catalog grows past whatever we ask for here — the API clamps the
+    // value, so over-asking is safe and under-asking truncates without any error.
+    const MARKET_FETCH_LIMIT = 12000;
     let cancelled = false;
     const wkey = (b: string, n: string, r: string) => `${b}|${n}|${r || ''}`;
     // Optional ?tier= preview override (only honored by the API when TIER_PREVIEW
@@ -860,7 +865,7 @@ export default function Home() {
     const previewTier = new URLSearchParams(window.location.search).get('tier');
     const tq = (sep: string) => (previewTier ? `${sep}tier=${encodeURIComponent(previewTier)}` : '');
     Promise.all([
-      fetch(`${API}/market?limit=5000${tq('&')}`).then(r => (r.ok ? r.json() : Promise.reject(r.status))),
+      fetch(`${API}/market?limit=${MARKET_FETCH_LIMIT}${tq('&')}`).then(r => (r.ok ? r.json() : Promise.reject(r.status))),
       fetch(`${API}/market/history?points=24${tq('&')}`).then(r => (r.ok ? r.json() : { history: [] })).catch(() => ({ history: [] })),
     ])
       .then(([d, h]: any[]) => {
